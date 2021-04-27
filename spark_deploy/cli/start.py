@@ -28,4 +28,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _deploy.deploy(reservation) if reservation else False
+    return _deploy.start(reservation) if reservation else False

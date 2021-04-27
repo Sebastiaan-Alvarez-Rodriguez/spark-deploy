@@ -11,8 +11,8 @@ def read_reservation_cli():
             break
         lines.append(line)
     try:
-        return _Reservation.from_string(''.join(lines))
+        return _Reservation.from_string('\n'.join(lines))
     except Exception as e:
-        printe('Could not read data from input. Was input malformed?')
+        printe('Could not read data from input. Was input malformed? ', e)
         return None
 
