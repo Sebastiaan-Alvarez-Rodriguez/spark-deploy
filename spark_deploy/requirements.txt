@@ -1,2 +1,0 @@
-metareserve>=0.1.0
-remoto>=1.2.0

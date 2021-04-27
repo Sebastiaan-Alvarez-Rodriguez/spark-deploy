@@ -77,8 +77,6 @@ def install(location, retries):
     return False
 
 
-
-
 if __name__ == '__channelexec__': # In case we use this module with remoto legacy connections (local, ssh), we need this footer.
     for item in channel:
         channel.send(eval(item))

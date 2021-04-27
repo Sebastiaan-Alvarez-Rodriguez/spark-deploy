@@ -10,10 +10,10 @@ from internal.util.printer import *
 def subparser(subparsers):
     '''Register subparser modules'''
     startparser = subparsers.add_parser('start', help='Orchestrate Spark environment on server cluster.')
-    startparser.add_argument('-c', '--clusterconfig', metavar='config', type=str, help='Cluster config filename to use for execution')
-    startparser.add_argument('-d', '--debug-mode', dest='debug_mode', help='Run remote in debug mode', action='store_true')
-    startparser.add_argument('-dm', '--deploy-mode', dest='deploy_mode', type=str, metavar='mode', default=str(DeployMode.STANDARD), help='Deployment mode for cluster', choices=[str(x) for x in DeployMode])
-    startparser.add_argument('--internal', nargs=1, type=str, help=argparse.SUPPRESS)
+    # startparser.add_argument('-c', '--clusterconfig', metavar='config', type=str, help='Cluster config filename to use for execution')
+    # startparser.add_argument('-d', '--debug-mode', dest='debug_mode', help='Run remote in debug mode', action='store_true')
+    # startparser.add_argument('-dm', '--deploy-mode', dest='deploy_mode', type=str, metavar='mode', default=str(DeployMode.STANDARD), help='Deployment mode for cluster', choices=[str(x) for x in DeployMode])
+    # startparser.add_argument('--internal', nargs=1, type=str, help=argparse.SUPPRESS)
     return [startparser]
 
 
@@ -23,7 +23,7 @@ def deploy_args_set(args):
 
     Returns:
         `True` if we found arguments used by this subsubparser, `False` otherwise.'''
-    return args.command == 'allocate'
+    return args.command == 'start'
 
 
 def deploy(parsers, args):
