@@ -1,2 +1,3 @@
-metareserve>=0.1.0
+metareserve>=0.1.1
 remoto>=1.2.0
+sshconf>=0.2.2
