@@ -16,14 +16,22 @@ def _get_modules():
     return [start, stop, check]
 
 
-# Register subparser modules
+def generic_args(parser):
+    '''Configure arguments important for all modules (install, uninstall, start, stop) here.'''
+    parser.add_argument('--installdir', type=str, default='~/', help='Installation directory for Spark and java, for all remote machines.')
+    parser.add_argument('--key-path', dest='key_path', type=str, default=None, help='Path to ssh key to access nodes.')
+
+
+
 def subparser(parser):
+    '''Register subparser modules'''
+    generic_args(parser)
     subparsers = parser.add_subparsers(help='Subcommands', dest='command')
     return [x.subparser(subparsers) for x in _get_modules()]
 
 
-# Processing of deploy commandline args occurs here
 def deploy(mainparser, parsers, args):
+    '''Processing of deploy commandline args occurs here'''
     for parsers_for_module, module in zip(parsers, _get_modules()):
         if module.deploy_args_set(args):
             return module.deploy(parsers_for_module, args)

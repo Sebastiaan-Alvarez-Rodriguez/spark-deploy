@@ -64,7 +64,7 @@ def install(location, url, retries):
 
     Returns:
         `True` on success, `False` on failure.'''
-    stderr('Beginning install procedure')
+    stderr('Beginning Spark install procedure')
     if spark_installed(location): # Already installed
         return True
 
