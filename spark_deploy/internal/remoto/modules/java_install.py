@@ -125,15 +125,15 @@ def set_java_home(path):
 def java_acceptable_version(versionstring, minversion, maxversion):
     '''Returns `True` if given versionstring contains a correct version number. Strings are matched using regex, finding the first number.'''
     versionnumber = int(re.search(r'\d+', versionstring).group())
-    return versionnumber >= minversion and versionnumber <= maxversion
+    return (versionnumber >= minversion or minversion == 0) and (versionnumber <= maxversion or maxversion == 0)
 
 
-def phase0():
+def phase0(minversion, maxversion):
     '''Phase 0: JAVA_HOME check installation. If this succeeds, we don't have to do anything.'''
     return java_home_valid() and java_acceptable_version(os.path.join(java_home(), 'bin', 'java'), minversion, maxversion)
 
 
-def phase1():
+def phase1(minversion, maxversion):
     '''Phase 1: Java shell-check installation. If the shell-default java version has a high-enough number, we only have to set `JAVA_HOME` env variable.'''
     if java_shell_available() and java_acceptable_version(java_exec_get_versioninfo('java'), minversion, maxversion): 
         # Java is available on shell. We might have to set `JAVA_HOME` to the right place.
@@ -150,77 +150,81 @@ def phase1():
     return False
 
 
-def phase2():
+def phase2(minversion, maxversion):
     '''Phase 2: Java root availability check installation'''
     if java_root_available():
         for x in java_root_paths():
             if java_acceptable_version(java_exec_get_versioninfo(x), minversion, maxversion):
                 prints('Found Java in: {}'.format(x))
                 if java_home_available():
-                    if (java_shell_path != java_home()): # `JAVA_HOME` is set, but to an incorrect path.
-                        printw('Found JAVA_HOME={}, version mismatched requirements. Set to matching location={}'.format(java_home(), java_shell_path), file=sys.stderr)
-                        set_java_home(java_shell_path)
+                    if (x != java_home()): # `JAVA_HOME` is set, but to an incorrect path.
+                        printw('Found JAVA_HOME={}, version mismatched requirements. Set to matching location={}'.format(java_home(), x), file=sys.stderr)
+                        set_java_home(x)
                     else: # `JAVA_HOME` is already set correctly. Impossible. We just checked this in phase0. External tampering. Doesn't matter, `JAVA_HOME` is set correctly now.
                         pass
                 else: # `JAVA_HOME` is not set.
-                    set_java_home(java_shell_path)
+                    set_java_home(x)
                 return True
     return False
 
-def install(location, url, minversion, maxversion, retries):
+
+def install(location=None, url=None, minversion=11, maxversion=0, use_sudo=False, retries=5):
     '''Checks if Java is already available. If not, installs Java by downloading and installing from `.tgz`. Assumes extracted zip layout to look like:
     | some_dir/
+    |           bin/
     |           conf/
-    |           examples/
     |           ...
-    |           README.md
     The contents from `some_dir` are copied to given `location`.
+    In particular, this module allows us to install using sudo or not.
     Args:
-        location (str): The location where final output will be available on success.
-        url (str): URL of zip to download. Look e.g. in 'https://downloads.apache.org/spark/' for zips.
-        retries (int): Number of retries to use when downloading, extracting.
+        location (optional str): path to store local Java installation. Note: Ignored if `use_sudo`.
+        url (optional str): URL of zip to download. Look e.g. in 'https://jdk.java.net/archive/' for archives. Ignored if `use_sudo`.
+        minversion (optional int): Minimal acceptable java version. 0 means no limit.
+        maxversion (optional int): Maximal acceptable java version. 0 means no limit.
+        use_sudo (optional bool): If set, sudo user rights are used to install system-wide Java distribution. Otherwise, installs locally.
+        retries (optional int): Number of retries to use when downloading, extracting.
 
     Returns:
         `True` on success, `False` on failure.'''
     stderr('Beginning Java install procedure')
 
-    if phase0() or phase1() or phase2():
+    if phase0(minversion, maxversion) or phase1(minversion, maxversion) or phase2(minversion, maxversion):
         return True
 
     # Phase 3a: Java root installation
     if use_sudo:
-        cmd = 'sudo apt update -y && sudo apt install openjdk-11-jre-headless -y'
+        # Download the greatest version of maxversion, minversion, 15. 15 is picked because we know it exists, and is the latest ATM.
+        openjdk = 'openjdk-{}-jre-headless -y'.format(max(maxversion, minversion, 15))
+        cmd = 'sudo apt update -y && sudo apt install {}'.format(openjdk)
         if subprocess.call(cmd, shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL) == 0:
-            if phase1() or phase2():
-                return True
+            if phase1(minversion, maxversion) or phase2(minversion, maxversion):
+                if java_acceptable_version(os.path.join(java_home(), 'bin', 'java'), minversion, maxversion):
+                    return True
+                else:
+                    printe('Installed java does not meet dependencies. Picked Java version min={}, max={}, installed={}'.format(minversion, maxversion, max(maxversion, minversion, 15)))
+                    return False
             else:
-                printe('Unexpected failure to configure newly downloaded "openjdk-11-jre-headless". Please install it yourself, and point JAVA_HOME to the root installation directory.')
+                printe('Unexpected failure to configure newly downloaded "{}". Please point JAVA_HOME to the root installation directory yourself.'.format(openjdk))
                 return False
         else:
             printe('Unexpected error during execution of command: {}'.format(cmd))
             return False
     else: # Phase 3b: Java local installation
-        
-    
-    return False
-
-
-
-    with tempfile.TemporaryDirectory() as tmpdir: # We use a tempfile to store the downloaded zip.
-        archiveloc = os.path.join(tmpdir, 'spark.tgz')
-        if not os.path.isfile(archiveloc):
-            for x in range(retries):
-                try:
-                    _rm(archiveloc, ignore_errors=True)
-                    stderr('[{}] Fetching spark from {}'.format(x, url))
-                    urllib.request.urlretrieve(url, archiveloc)
-                    break
-                except Exception as e:
-                    if x == 0:
-                        stderr('Could not download Spark. Retrying...')
-                    elif x == 4:
-                        stderr('Could not download Spark: ', e)
-                        return False
+        with tempfile.TemporaryDirectory() as tmpdir: # We use a tempfile to store the downloaded archive.
+            archiveloc = os.path.join(tmpdir, 'java.tar.gz')
+            if not os.path.isfile(archiveloc):
+                for x in range(retries):
+                    try:
+                        _rm(archiveloc, ignore_errors=True)
+                        stderr('[{}] Fetching Java from {}'.format(x, url))
+                        urllib.request.urlretrieve(url, archiveloc)
+                        break
+                    except Exception as e:
+                        if x == 0:
+                            stderr('Could not download Java. Retrying...')
+                        elif x == 4:
+                            stderr('Could not download Java: ', e)
+                            return False
         for x in range(retries):
             try:
                 extractloc = os.path.join(tmpdir, 'extracted')

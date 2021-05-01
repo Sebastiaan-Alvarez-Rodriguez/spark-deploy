@@ -1,18 +1,20 @@
 import concurrent.futures
+
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import internal.remoto.modules.spark_install as _spark_install
-import internal.remoto.modules.spark_boot as _spark_boot
+import internal.remoto.modules.spark_start as _spark_start
+import internal.util.location as loc
 from internal.util.printer import *
 
 
-def _boot_spark(remote_connection, installdir, boot_slave=True, boot_master=False, retries=5):
+def _start_spark(remote_connection, installdir, boot_slave=True, boot_master=False, retries=5):
     if boot_slave and boot_master:
         raise ValueError('Cannot launch both slave and master daemon on 1 node! Spark supports only 1 deamon per node.')
-    remote_connection.import_module(_spark_boot)
+    remote_connection.import_module(_spark_start)
     if boot_master:
-        return remote_connection.boot_master(installdir, retries)
+        return remote_connection.boot_master(loc.sparkdir(installdir), retries)
     if boot_slave:
-        return remote_connection.boot_slave(installdir, retries)
+        return remote_connection.boot_slave(loc.sparkdir(installdir), retries)
     return True # We did not have to do anything
 
 
@@ -26,7 +28,7 @@ def start(reservation, installdir, key_path, master):
     '''Boot Spark on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start Spark on.
-        installdir (str): Location on remote host where Spark is installed.
+        installdir (str): Location on remote host where Spark (and any local-installed Java) is installed in.
         key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
         master (int): Node id that must become the master. If `None`, the node with lowest public ip value (string comparison) will be picked.
 
@@ -46,7 +48,7 @@ def start(reservation, installdir, key_path, master):
         futures_connection = {executor.submit(_get_ssh_connection, x.ip_public, silent=False, ssh_params=ssh_kwargs): x for x in reservation.nodes}
         connectionwrappers = {key.result(): val for key, val in futures_connection.items()}
 
-        futures_start_spark = {executor.submit(_boot_spark, key.connection, installdir, boot_slave=val!=master_picked, boot_master=val==master_picked): x for key, val in connectionwrappers.items()}
+        futures_start_spark = {executor.submit(_start_spark, key.connection, installdir, boot_slave=val!=master_picked, boot_master=val==master_picked): x for key, val in connectionwrappers.items()}
         state_ok = True
         for key, val in futures_start_spark.items():
             if not key.result():

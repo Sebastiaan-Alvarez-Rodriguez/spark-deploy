@@ -2,8 +2,8 @@ import concurrent.futures
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import internal.remoto.modules.spark_install as _spark_install
 import internal.remoto.modules.java_install as _java_install
-from internal.util.printer import *
 import internal.util.location as loc
+from internal.util.printer import *
 
 def _default_spark_url():
     return 'https://downloads.apache.org/spark/spark-3.1.1/spark-3.1.1-bin-hadoop2.7.tgz'
@@ -23,13 +23,13 @@ def _install_spark(connection, installdir, spark_url, retries=5):
     return remote_module.install(loc.sparkdir(installdir), spark_url, retries)
 
 
-def _install_java(connection, installdir, java_url, retries=5):
+def _install_java(connection, installdir, java_url, java_min, java_max, retries=5):
     remote_module = connection.import_module(_java_install)
     return remote_module.install(loc.java_nonroot_dir(installdir), spark_url, retries)
 
 
 
-def install(reservation, installdir, key_path, spark_url=_default_spark_url(), java_url, java_min, java_max):
+def install(reservation, installdir, key_path, spark_url=_default_spark_url(), java_url=_default_java_url(), java_min=_default_java_min(), java_max=_default_java_max()):
     '''Install Spark and Java 11 on a reserved cluster. Does not reinstall if already present.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to install Spark on.
@@ -51,10 +51,17 @@ def install(reservation, installdir, key_path, spark_url=_default_spark_url(), j
         connectionwrappers = [x.result() for x in futures_connection]
 
         futures_install_spark = {executor.submit(_install_spark, x.connection, installdir, spark_url): x for x in connectionwrappers}
+        futures_install_java = {executor.submit(_install_java, x.connection, installdir, java_url, java_min, java_max): x for x in connectionwrappers}
+        
+
         state_ok = True
         for key, val in futures_install_spark.items():
             if not key.result():
                 printe('Could not install Spark on remote {}!'.format(val.connection.hostname))
+                state_ok = False
+        for key, val in futures_install_java.items():
+            if not key.result():
+                printe('Could not install java on remote {}!'.format(val.connection.hostname))
                 state_ok = False
         if state_ok:
             prints('Installation on all nodes succeeded.')
