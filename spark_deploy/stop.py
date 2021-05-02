@@ -19,6 +19,12 @@ def _stop_spark(remote_connection, installdir, workdir=None, silent=False, retri
     return remote_connection.stop_all(loc.sparkdir(installdir), workdir, silent, retries)
 
 
+def _merge_kwargs(x, y):
+    z = x.copy()
+    z.update(y)
+    return z
+
+
 def stop(reservation, installdir, key_path, slave_workdir=_default_workdir(), silent=False, retries=5):
     '''Stop Spark on an existing reservation.
     Args:
@@ -35,18 +41,17 @@ def stop(reservation, installdir, key_path, slave_workdir=_default_workdir(), si
         raise ValueError('Reservation does not contain any items'+(' (reservation=None)' if not reservation else ''))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(reservation)) as executor:
-        ssh_kwargs = {'IdentitiesOnly': 'yes', 'User': x.extra_info['user'], 'StrictHostKeyChecking': 'no'}
+        ssh_kwargs = {'IdentitiesOnly': 'yes', 'StrictHostKeyChecking': 'no'}
         if key_path:
             ssh_kwargs['IdentityFile'] = key_path
 
-
-        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=ssh_kwargs) for x in reservation.nodes}
+        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, 'User': x.extra_info['user'])) for x in reservation.nodes}
         connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
 
         futures_spark_stop = {node: executor.submit(_stop_spark, conn_wrapper.connection, installdir, workdir=slave_workdir, silent=silent, retries=retries): x for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
         for node, slave_future in futures_spark_stop.items():
-            if not key.result():
+            if not slave_future.result():
                 printe('Could not stop Spark slave on remote: {}'.format(node))
                 state_ok = False
         return state_ok

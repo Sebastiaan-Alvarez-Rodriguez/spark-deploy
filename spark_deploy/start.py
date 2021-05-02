@@ -31,11 +31,19 @@ def _get_master_and_slaves(reservation, master_id=None):
     
     Returns:
         1 master, and a list of slaves.'''
+    if len(reservation) == 1:
+        return next(reservation.nodes), []
+
     if master == None: # Pick node with lowest public ip value.
-        nodes = sorted(reservation.nodes, key=lambda x: x.ip_public)
-        return nodes[0], nodes[1:]
-    masternode = reservation.get_node(node_id=master_id)
-    return masternode, [x for x in reservation.nodes if x.node_id != master_id]
+        tmp = sorted(reservation.nodes, key=lambda x: x.ip_public)
+        return tmp[0], tmp[1:]
+    return reservation.get_node(node_id=master_id), [x for x in reservation.nodes if x.node_id != master_id]
+
+
+def _merge_kwargs(x, y):
+    z = x.copy()
+    z.update(y)
+    return z
 
 
 def start(reservation, installdir, key_path, master_id=None, slave_workdir=_default_workdir(), silent=False, retries=_default_retries()):
@@ -55,14 +63,14 @@ def start(reservation, installdir, key_path, master_id=None, slave_workdir=_defa
         raise ValueError('Reservation does not contain any items'+(' (reservation=None)' if not reservation else ''))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(reservation)) as executor:
-        ssh_kwargs = {'IdentitiesOnly': 'yes', 'User': x.extra_info['user'], 'StrictHostKeyChecking': 'no'}
+        ssh_kwargs = {'IdentitiesOnly': 'yes', 'StrictHostKeyChecking': 'no'}
         if key_path:
             ssh_kwargs['IdentityFile'] = key_path
 
         master_picked, slaves_picked = _get_master_and_slaves(reservation, master_id)
         print('Picked master node: {}'.format(master_picked))
 
-        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=ssh_kwargs) for x in reservation.nodes}
+        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, 'User': x.extra_info['user'])) for x in reservation.nodes}
         connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
 
         future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, installdir, port=master_port, webui_port=webui_port, silent=False, retries=5)
@@ -73,7 +81,7 @@ def start(reservation, installdir, key_path, master_id=None, slave_workdir=_defa
         futures_spark_slaves = {node: executor.submit(_start_spark_slave, conn_wrapper.connection, installdir, slave_workdir, master_picked, master_port=master_port, silent=silent, retries=retries): x for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
         for node, slave_future in futures_start_spark.items():
-            if not key.result():
+            if not slave_future.result():
                 printe('Could not start Spark slave on remote: {}'.format(node))
                 state_ok = False
         return state_ok
