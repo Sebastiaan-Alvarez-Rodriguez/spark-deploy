@@ -1,6 +1,7 @@
 import argparse
 import datetime
 
+import stop as _stop
 from internal.util.printer import *
 import internal.util.fs as fs
 
@@ -15,7 +16,9 @@ def _cached(response, cached_val):
 def subparser(subparsers):
     '''Register subparser modules'''
     stopparser = subparsers.add_parser('stop',  help='Stop a given reservation or all reservations that currently running on this machine')
-    stopparser.add_argument('-n', '--number', nargs='*', metavar='number', type=int, help='Reservation number to stop. If none given, stops all known reservations.')
+    stopparser.add_argument('--workdir', metavar='path', type=str, default=_stop._default_workdir(), help='If set, workdir location will be removed for all slave daemons (default={}).'.format(_stop._default_workdir()))
+    stopparser.add_argument('--silent', help='If set, less boot output is shown.', action='store_true')
+    stopparser.add_argument('--retries', metavar='amount', type=int, default=_stop._default_retries(), help='Amount of retries to use for risky operations (default={}).'.format(_stop._default_retries()))
     return [stopparser]
 
 
@@ -25,11 +28,9 @@ def deploy_args_set(args):
 
     Returns:
         `True` if we found arguments used by this subsubparser, `False` otherwise.'''
-    return args.command == 'allocate'
+    return args.command == 'stop'
 
 
 def deploy(parsers, args):
-    if args.conf_list:
-        print_profiles(args.conf_list)
-        return True
-    return check_and_allocate(args.time, args.amount, args.location, args.name, args.conf)
+    reservation = _cli_util.read_reservation_cli()
+    return _stop.stop(reservation, args.installdir, args.key_path, args.workdir, silent=args.silent, retries=args.retries) if reservation else False

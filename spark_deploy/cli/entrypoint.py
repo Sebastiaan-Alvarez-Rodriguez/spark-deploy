@@ -10,10 +10,10 @@ sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__)))) # A
 
 
 def _get_modules():
+    import cli.install as install
     import cli.start as start
     import cli.stop as stop
-    import cli.check as check
-    return [start, stop, check]
+    return [install, start, stop]
 
 
 def generic_args(parser):

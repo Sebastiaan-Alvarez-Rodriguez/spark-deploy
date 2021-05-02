@@ -1,5 +1,5 @@
 import cli.util as _cli_util
-import install  as _install
+import install as _install
 from internal.util.printer import *
 
 

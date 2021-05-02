@@ -14,7 +14,7 @@ def stderr(string, *args, **kwargs):
     print('[{}] {}'.format(socket.gethostname(), string), *args, **kwargs)
 
 
-def start_master(sparkloc, port=7077, webui_port=2205, silent=False):
+def start_master(sparkloc, port=7077, webui_port=2205, silent=False, retries=5, retries_sleep=5):
     '''Boots master on given node.
     Note: Spark works with Daemons, so expect to return quickly, probably even before the slave is actually ready.
 
@@ -23,6 +23,8 @@ def start_master(sparkloc, port=7077, webui_port=2205, silent=False):
         port (optional int): port to use for master.
         webui_port (optional int): port for Spark webUI to use.
         silent (optional bool): If set, we only print errors and critical info (e.g. spark master url). Otherwise, more verbose output.
+        retries (optional int): Number of tries we try to connect to the master.
+        retries_sleep (optional int): Number of seconds we sleep between tries.
 
     Returns:
         `True` on success, `False` otherwise.'''
@@ -38,15 +40,15 @@ def start_master(sparkloc, port=7077, webui_port=2205, silent=False):
     if not silent:
         stderr('Spawning master')
 
-    cmd = '{} --host {} --port {} --webui-port {} {}'.format(scriptloc, node, port, webui_port, '> /dev/null 2>&1' if not debug_mode else '')
+    cmd = '{} --host {} --port {} --webui-port {}'.format(scriptloc, node, port, webui_port)
     kwargs = {'stderr': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL} if silent else {} 
-    state_ok = subprocess.call(cmd, shell=True, **kwargs) == 0
-
-    if state_ok:
-        printc('[{}] MASTER ready on spark://{}:{} (webui-port: {})'.format(socket.gethostname(), node, port, webui_port), Color.CAN, file=sys.stderr)
-    else:
-        stderr('Could not boot master')
-    return state_ok
+    for x in range(retries):
+        if subprocess.call(cmd, shell=True, **kwargs) == 0:
+            printc('[{}] MASTER ready on spark://{}:{} (webui-port: {})'.format(socket.gethostname(), node, port, webui_port), Color.CAN, file=sys.stderr)
+            return True
+        time.sleep(retries_sleep)
+    stderr('Could not boot master')
+    return False
 
 
 def start_slave(sparkloc, workdir, master_node, master_port=7077, silent=True, retries=5, retries_sleep=5):
@@ -90,25 +92,6 @@ def start_slave(sparkloc, workdir, master_node, master_port=7077, silent=True, r
         time.sleep(retries_sleep)
     stderr('Could not boot slave (failed {} times, {} sleeptime between executions)'.format(retries, retries_sleep))
     return False
-
-
-# def boot_slaves(nodes, master_node, master_port=7077, debug_mode=False):
-#     '''Boots multiple slaves in parallel.
-#     Args:
-#         nodes: ip/hostname list of nodes to boot workers on.
-#         master_node: ip/hostname of master.
-#         master_port: port for master.
-#         debug_mode: True if we must print debug info, False otherwise.
-#         deploymode: Denotes where we locate the slave work-dir: E.g. on NFS-mount for debugging (slow), on local disk for each node, etc.
-
-#     Returns:
-#         `True` on success, `False` otherwise.'''
-#     executors = []
-#     for node in nodes:
-#         executors.append(boot_slave(node, master_node, master_port=master_port, deploy_mode=deploy_mode, debug_mode=debug_mode, execute=False))
-#     Executor.run_all(executors)
-#     return Executor.wait_all(executors)
-
 
 
 if __name__ == '__channelexec__': # In case we use this module with remoto legacy connections (local, ssh), we need this footer.
