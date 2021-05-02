@@ -12,6 +12,7 @@ def subparser(subparsers):
     installparser.add_argument('--java-url', dest='java_url', type=str, default=_cli_util.default_java_url(), help='Java download URL. Make sure the downloaded version is acceptable (between [`java-min`, `java-max`])')
     installparser.add_argument('--java-min', dest='java_min', type=int, default=_cli_util.default_java_min(), help='Java minimal version (default={}). 0 means "no limit". use this to ensure a recent-enough version is installed for use with your Spark version.'.format(_cli_util.default_java_min()))
     installparser.add_argument('--java-max', dest='java_max', type=int, default=_cli_util.default_java_max(), help='Java minimal version (default={}). 0 means "no limit". use this to ensure a recent-enough version is installed for use with your Spark version.'.format(_cli_util.default_java_max()))
+    installparser.add_argument('--use-sudo', dest='use_sudo', help='If set, uses superuser-priviledged commands during installation. Otherwise, performs local installs, no superuser privileges required.')
     return [installparser]
 
 

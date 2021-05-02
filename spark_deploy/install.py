@@ -18,18 +18,21 @@ def _default_java_max():
     return 0
 
 
+def _default_use_sudo():
+    return False
+
+
 def _install_spark(connection, installdir, spark_url, retries=5):
     remote_module = connection.import_module(_spark_install)
     return remote_module.install(loc.sparkdir(installdir), spark_url, retries)
 
 
-def _install_java(connection, installdir, java_url, java_min, java_max, retries=5):
+def _install_java(connection, installdir, java_url, java_min, java_max, use_sudo, retries=5):
     remote_module = connection.import_module(_java_install)
-    return remote_module.install(loc.java_nonroot_dir(installdir), spark_url, retries)
+    return remote_module.install(location=loc.java_nonroot_dir(installdir), url=spark_url, minversion=java_min, maxversion=java_max, use_sudo=use_sudo, retries=retries)
 
 
-
-def install(reservation, installdir, key_path, spark_url=_default_spark_url(), java_url=_default_java_url(), java_min=_default_java_min(), java_max=_default_java_max()):
+def install(reservation, installdir, key_path, spark_url=_default_spark_url(), java_url=_default_java_url(), java_min=_default_java_min(), java_max=_default_java_max(), use_sudo=_default_use_sudo()):
     '''Install Spark and Java 11 on a reserved cluster. Does not reinstall if already present.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to install Spark on.
@@ -51,7 +54,7 @@ def install(reservation, installdir, key_path, spark_url=_default_spark_url(), j
         connectionwrappers = [x.result() for x in futures_connection]
 
         futures_install_spark = {executor.submit(_install_spark, x.connection, installdir, spark_url): x for x in connectionwrappers}
-        futures_install_java = {executor.submit(_install_java, x.connection, installdir, java_url, java_min, java_max): x for x in connectionwrappers}
+        futures_install_java = {executor.submit(_install_java, x.connection, installdir, java_url, java_min, java_max, use_sudo): x for x in connectionwrappers}
         
 
         state_ok = True
