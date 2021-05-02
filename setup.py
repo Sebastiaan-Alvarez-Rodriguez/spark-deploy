@@ -17,7 +17,7 @@ setuptools.setup(
     description='Spark deployment Plugin, using metareserve reservation system',
     long_description=read('README.md'),
     long_description_content_type='text/markdown',
-    url='https://github.com/Sebastiaan-Alvarez-Rodriguez/metaspark',
+    url='https://github.com/Sebastiaan-Alvarez-Rodriguez/spark-deploy',
     packages=setuptools.find_packages(),
     package_dir={'': '.'},
     classifiers=(
