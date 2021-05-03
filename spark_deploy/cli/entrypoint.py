@@ -11,14 +11,15 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__)))) 
 
 def _get_modules():
     import cli.install as install
+    import cli.uninstall as uninstall
     import cli.start as start
     import cli.stop as stop
-    return [install, start, stop]
+    return [install, uninstall, start, stop]
 
 
 def generic_args(parser):
     '''Configure arguments important for all modules (install, uninstall, start, stop) here.'''
-    parser.add_argument('--installdir', type=str, default='~/', help='Installation directory for Spark and java, for all remote machines.')
+    parser.add_argument('--installdir', type=str, default='./deps/', help='Installation directory for Spark and java, for all remote machines.')
     parser.add_argument('--key-path', dest='key_path', type=str, default=None, help='Path to ssh key to access nodes.')
 
 

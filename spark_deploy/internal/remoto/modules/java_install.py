@@ -1,21 +1,61 @@
+import builtins
+from enum import Enum
 import os
-import socket
 from pathlib import Path
 import re
 import shutil
+import socket
+import subprocess
 import sys
 import tempfile
 import urllib.request
 
-from internal.util.printer import *
-
-
-def stderr(string, *args, **kwargs):
-    kwargs['flush'] = True
-    kwargs['file'] = sys.stderr
-    print('[{}] {}'.format(socket.gethostname(), string), *args, **kwargs)
-
 '''In this file, we provide functions to install and interact with Apache Spark.'''
+
+
+##########################################################################################
+# Here, we copied the contents from internal.util.printer (as we cannot use local imports)
+def print(string, *args, **kwargs):
+    kwargs['flush'] = True
+    kwargs['file'] = sys.stderr  # Print everything to stderr!
+    return builtins.print('[{}] {}'.format(socket.gethostname(), string), *args, **kwargs)
+
+
+class Color(Enum):
+    '''An enum to specify what color you want your text to be'''
+    RED = '\033[1;31m'
+    GRN = '\033[1;32m'
+    YEL = '\033[1;33m'
+    BLU = '\033[1;34m'
+    PRP = '\033[1;35m'
+    CAN = '\033[1;36m'
+    CLR = '\033[0m'
+
+# Print given text with given color
+def printc(string, color, **kwargs):
+    print(format(string, color), **kwargs)
+
+# Print given success text
+def prints(string, color=Color.GRN, **kwargs):
+    print('[SUCCESS] {}'.format(format(string, color)), **kwargs)
+
+# Print given warning text
+def printw(string, color=Color.YEL, **kwargs):
+    print('[WARNING] {}'.format(format(string, color)), **kwargs)
+
+
+# Print given error text
+def printe(string, color=Color.RED, **kwargs):
+    print('[ERROR] {}'.format(format(string, color)), **kwargs)
+
+
+# Format a string with a color
+def format(string, color):
+    if os.name == 'posix':
+        return '{}{}{}'.format(color.value, string, Color.CLR.value)
+    return string
+
+##########################################################################################
 
 
 def _rm(directory, *args, ignore_errors=False):
@@ -51,7 +91,7 @@ def _resolvelink(path, *args):
     str(Path(os.path.join(path, *args)).resolve().absolute())
 
 
-def java_exec_get_versioninfo(java_exec):
+def java_exec_get_versioninfo(java_exec, *args):
     '''Fetches Java version CLI output.
     Args:
         java_exec (str): Full path to Java executable to test.
@@ -61,7 +101,7 @@ def java_exec_get_versioninfo(java_exec):
 
     Returns:
         Raw decoded CLI version output for given executable.'''
-    return subprocess.check_output('{} -version'.format(java_exec), shell=True).decode('utf-8').strip()
+    return subprocess.check_output('{} -version 2>&1'.format(os.path.join(java_exec, *args)), shell=True).decode('utf-8').strip()
 
 
 def java_installed(location):
@@ -91,7 +131,10 @@ def java_root_paths():
 
 def java_root_available():
     '''Returns whether at least one Java installation is available as a root installation.'''
-    for x in os.path.isfile(os.path.join(os.path.abspath(os.sep), 'usr', 'lib', 'jvm'), only_dirs=True, full_paths=True):
+    path = os.path.join(os.path.abspath(os.sep), 'usr', 'lib', 'jvm')
+    if not os.path.isdir(path):
+        return False
+    for x in _ls(path, only_dirs=True, full_paths=True):
         if java_installed(x):
             return True
     return False
@@ -124,13 +167,17 @@ def set_java_home(path):
 
 def java_acceptable_version(versionstring, minversion, maxversion):
     '''Returns `True` if given versionstring contains a correct version number. Strings are matched using regex, finding the first number.'''
-    versionnumber = int(re.search(r'\d+', versionstring).group())
-    return (versionnumber >= minversion or minversion == 0) and (versionnumber <= maxversion or maxversion == 0)
+    try:
+        versionnumber = int(re.search(r'\d+', versionstring).group())
+        return (versionnumber >= minversion or minversion == 0) and (versionnumber <= maxversion or maxversion == 0)
+    except Exception as e:
+        printe('Version string does not have a number contained: "{}"'.format(versionstring))
+        return False
 
 
 def phase0(minversion, maxversion):
     '''Phase 0: JAVA_HOME check installation. If this succeeds, we don't have to do anything.'''
-    return java_home_valid() and java_acceptable_version(os.path.join(java_home(), 'bin', 'java'), minversion, maxversion)
+    return java_home_valid() and java_acceptable_version(java_exec_get_versioninfo(java_home(), 'bin', 'java'), minversion, maxversion)
 
 
 def phase1(minversion, maxversion):
@@ -168,7 +215,13 @@ def phase2(minversion, maxversion):
     return False
 
 
-def install(location=None, url=None, minversion=11, maxversion=0, use_sudo=False, retries=5):
+def java_install_sudo(minversion, maxversion, retries):
+    return java_install(None, None, minversion, maxversion, True, retries)
+
+def java_install_nonsudo(location, url, minversion, maxversion, retries):
+    return java_install(location, url, minversion, maxversion, False, retries)
+
+def java_install(location=None, url=None, minversion=11, maxversion=0, use_sudo=False, retries=5):
     '''Checks if Java is already available. If not, installs Java by downloading and installing from `.tgz`. Assumes extracted zip layout to look like:
     | some_dir/
     |           bin/
@@ -186,7 +239,7 @@ def install(location=None, url=None, minversion=11, maxversion=0, use_sudo=False
 
     Returns:
         `True` on success, `False` on failure.'''
-    stderr('Beginning Java install procedure')
+    print('Beginning Java install procedure')
 
     if phase0(minversion, maxversion) or phase1(minversion, maxversion) or phase2(minversion, maxversion):
         return True
@@ -198,7 +251,7 @@ def install(location=None, url=None, minversion=11, maxversion=0, use_sudo=False
         cmd = 'sudo apt update -y && sudo apt install {}'.format(openjdk)
         if subprocess.call(cmd, shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL) == 0:
             if phase1(minversion, maxversion) or phase2(minversion, maxversion):
-                if java_acceptable_version(os.path.join(java_home(), 'bin', 'java'), minversion, maxversion):
+                if java_acceptable_version(java_exec_get_versioninfo(java_home(), 'bin', 'java'), minversion, maxversion):
                     return True
                 else:
                     printe('Installed java does not meet dependencies. Picked Java version min={}, max={}, installed={}'.format(minversion, maxversion, max(maxversion, minversion, 15)))
@@ -216,33 +269,40 @@ def install(location=None, url=None, minversion=11, maxversion=0, use_sudo=False
                 for x in range(retries):
                     try:
                         _rm(archiveloc, ignore_errors=True)
-                        stderr('[{}] Fetching Java from {}'.format(x, url))
+                        print('Fetching Java from {}'.format(url))
                         urllib.request.urlretrieve(url, archiveloc)
                         break
                     except Exception as e:
                         if x == 0:
-                            stderr('Could not download Java. Retrying...')
+                            printw('Could not download Java. Retrying...')
                         elif x == 4:
-                            stderr('Could not download Java: ', e)
+                            printe('Could not download Java: {}'.format(e))
                             return False
-        for x in range(retries):
-            try:
-                extractloc = os.path.join(tmpdir, 'extracted')
-                os.makedirs(extractloc, exist_ok=True)
-                shutil.unpack_archive(archiveloc, extractloc)
+            for x in range(retries):
+                try:
+                    extractloc = os.path.join(tmpdir, 'extracted')
+                    os.makedirs(extractloc, exist_ok=True)
+                    shutil.unpack_archive(archiveloc, extractloc)
 
-                extracted_dir = next(_ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
-                for x in _ls(extracted_dir, full_paths=True): # Move every file and directory to the final location.
-                    shutil.move(x, location)
-                stderr('installation completed')
+                    extracted_dir = next(_ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
+                    _rm(location, ignore_errors=False)
+                    shutil.move(extracted_dir, location)        
+                    # extracted_dir = next(_ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
+                    # for x in _ls(extracted_dir, full_paths=True): # Move every file and directory to the final location.
+                    #     shutil.move(x, location)
+                except Exception as e:
+                    if x == 4:
+                        printe('Could not download zip file correctly: {}'.format(e))
+                        return False
+                    elif x == 0:
+                        printw('Could not extract archive ({}). Retrying...'.format(e))
+            set_java_home(os.path.abspath(location))
+            if java_acceptable_version(java_exec_get_versioninfo(java_home(), 'bin', 'java'), minversion, maxversion):
+                prints('installation completed.')
                 return True
-            except Exception as e:
-                if x == 4:
-                    stderr('Could not download zip file correctly: ', e)
-                    return False
-                elif x == 0:
-                    stderr('Could not extract archive. Retrying...', e)
-    return False
+            else:
+                printe('Unexpected failure to configure newly downloaded "{}". Please point JAVA_HOME to the root installation directory yourself.'.format(location))
+                return False
 
 
 if __name__ == '__channelexec__': # In case we use this module with remoto legacy connections (local, ssh), we need this footer.

@@ -24,12 +24,17 @@ def _default_use_sudo():
 
 def _install_spark(connection, installdir, spark_url, retries=5):
     remote_module = connection.import_module(_spark_install)
-    return remote_module.install(loc.sparkdir(installdir), spark_url, retries)
+    return remote_module.spark_install(loc.sparkdir(installdir), spark_url, retries)
 
 
 def _install_java(connection, installdir, java_url, java_min, java_max, use_sudo, retries=5):
     remote_module = connection.import_module(_java_install)
-    return remote_module.install(location=loc.java_nonroot_dir(installdir), url=spark_url, minversion=java_min, maxversion=java_max, use_sudo=use_sudo, retries=retries)
+
+    if use_sudo:
+        return remote_module.java_install_sudo(java_min, java_max, retries)
+    else:
+        return remote_module.java_install_nonsudo(loc.java_nonroot_dir(installdir), java_url, java_min, java_max, retries)
+
 
 def _merge_kwargs(x, y):
     z = x.copy()

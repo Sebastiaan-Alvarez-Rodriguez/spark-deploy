@@ -44,12 +44,12 @@ def _ls(directory, only_files=False, only_dirs=False, full_paths=False, *args):
                 yield os.path.join(ddir, entry) if full_paths else entry
 
 
-def spark_installed(location):
+def _is_installed(location):
     '''Check if Spark is installed in given directory.'''
     return os.path.isdir(location) and os.path.isdir(os.path.join(location, 'sbin'))
 
 
-def install(location, url, retries):
+def spark_install(location, url, retries):
     '''Installs Spark by downloading and installing from `.tgz`. Assumes extracted zip layout to look like:
     | some_dir/
     |           conf/
@@ -65,7 +65,7 @@ def install(location, url, retries):
     Returns:
         `True` on success, `False` on failure.'''
     stderr('Beginning Spark install procedure')
-    if spark_installed(location): # Already installed
+    if _is_installed(location): # Already installed
         return True
 
     os.makedirs(location, exist_ok=True)

@@ -3,7 +3,7 @@ import install as _install
 from internal.util.printer import *
 
 
-'''CLI module to install Spark and Java 11 on a cluster.'''
+'''CLI module to install Spark and Java on a cluster.'''
 
 def subparser(subparsers):
     '''Register subparser modules'''
