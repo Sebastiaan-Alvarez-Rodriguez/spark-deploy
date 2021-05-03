@@ -45,10 +45,10 @@ def stop(reservation, installdir, key_path, slave_workdir=_default_workdir(), si
         if key_path:
             ssh_kwargs['IdentityFile'] = key_path
 
-        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, 'User': x.extra_info['user'])) for x in reservation.nodes}
+        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes}
         connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
 
-        futures_spark_stop = {node: executor.submit(_stop_spark, conn_wrapper.connection, installdir, workdir=slave_workdir, silent=silent, retries=retries): x for node, conn_wrapper in connectionwrappers.items()}
+        futures_spark_stop = {node: executor.submit(_stop_spark, conn_wrapper.connection, installdir, workdir=slave_workdir, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
         for node, slave_future in futures_spark_stop.items():
             if not slave_future.result():

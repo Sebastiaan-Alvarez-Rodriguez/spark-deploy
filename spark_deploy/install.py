@@ -49,18 +49,27 @@ def install(reservation, installdir, key_path, spark_url=_default_spark_url(), j
         java_max (optional int): Maximal Java version to accept. 0 means no limit.
         use_sudo (optional bool): If set, installs some libraries system-wide. Otherwise, performs local installation.
 
+    Raises:
+        Valuerror: When reservation contains 0 nodes or is `None`.
+
     Returns:
         `True` on success, `False` otherwise.'''
     if not reservation or len(reservation) == 0:
         raise ValueError('Reservation does not contain any items'+(' (reservation=None)' if not reservation else ''))
 
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(reservation)) as executor:
         ssh_kwargs = {'IdentitiesOnly': 'yes', 'StrictHostKeyChecking': 'no'}
         if key_path:
             ssh_kwargs['IdentityFile'] = key_path
-
+        else:
+            printw('Connections have no assigned ssh key. Prepare to fill in your password often.')
         futures_connection = [executor.submit(_get_ssh_connection, x.ip_public, silent=False, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes]
         connectionwrappers = [x.result() for x in futures_connection]
+
+        if any(x for x in connectionwrappers if not x):
+            printe('Could not connect to some nodes.')
+            return False
 
         futures_install_spark = {executor.submit(_install_spark, x.connection, installdir, spark_url): x for x in connectionwrappers}
         futures_install_java = {executor.submit(_install_java, x.connection, installdir, java_url, java_min, java_max, use_sudo): x for x in connectionwrappers}

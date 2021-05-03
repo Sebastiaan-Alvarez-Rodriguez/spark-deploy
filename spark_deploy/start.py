@@ -70,7 +70,7 @@ def start(reservation, installdir, key_path, master_id=None, slave_workdir=_defa
         master_picked, slaves_picked = _get_master_and_slaves(reservation, master_id)
         print('Picked master node: {}'.format(master_picked))
 
-        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, 'User': x.extra_info['user'])) for x in reservation.nodes}
+        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes}
         connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
 
         future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, installdir, port=master_port, webui_port=webui_port, silent=False, retries=5)
@@ -78,7 +78,7 @@ def start(reservation, installdir, key_path, master_id=None, slave_workdir=_defa
             printe('Could not start Spark master on node: {}'.format(master_picked))
             return False
 
-        futures_spark_slaves = {node: executor.submit(_start_spark_slave, conn_wrapper.connection, installdir, slave_workdir, master_picked, master_port=master_port, silent=silent, retries=retries): x for node, conn_wrapper in connectionwrappers.items()}
+        futures_spark_slaves = {node: executor.submit(_start_spark_slave, conn_wrapper.connection, installdir, slave_workdir, master_picked, master_port=master_port, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
         for node, slave_future in futures_start_spark.items():
             if not slave_future.result():

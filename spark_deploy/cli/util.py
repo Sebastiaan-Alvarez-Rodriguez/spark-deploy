@@ -13,6 +13,6 @@ def read_reservation_cli():
     try:
         return _Reservation.from_string('\n'.join(lines))
     except Exception as e:
-        printe('Could not read data from input. Was input malformed? ', e)
+        printe('Could not read data from input. {}'.format(str(e)))
         return None
 

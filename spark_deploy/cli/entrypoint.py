@@ -6,7 +6,7 @@ import sys
 '''Python CLI module to deploy Spark on GENI resources.'''
 
 
-sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__)))) # Appends main project root as importpath.
+sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__)))) # Appends main project root as importpath.
 
 
 def _get_modules():
