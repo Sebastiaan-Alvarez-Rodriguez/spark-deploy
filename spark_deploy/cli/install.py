@@ -13,6 +13,8 @@ def subparser(subparsers):
     installparser.add_argument('--java-min', dest='java_min', type=int, default=_install._default_java_min(), help='Java minimal version (default={}). 0 means "no limit". use this to ensure a recent-enough version is installed for use with your Spark version.'.format(_install._default_java_min()))
     installparser.add_argument('--java-max', dest='java_max', type=int, default=_install._default_java_max(), help='Java minimal version (default={}). 0 means "no limit". use this to ensure a recent-enough version is installed for use with your Spark version.'.format(_install._default_java_max()))
     installparser.add_argument('--use-sudo', dest='use_sudo', help='If set, uses superuser-priviledged commands during installation. Otherwise, performs local installs, no superuser privileges required.')
+    installparser.add_argument('--silent', help='If set, less boot output is shown.', action='store_true')
+    installparser.add_argument('--retries', metavar='amount', type=int, default=_install._default_retries(), help='Amount of retries to use for risky operations (default={}).'.format(_install._default_retries()))
     return [installparser]
 
 
@@ -27,4 +29,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _install.install(reservation, args.installdir, args.key_path, args.spark_url, args.java_url, args.java_min, args.java_max) if reservation else False
+    return _install.install(reservation, args.installdir, args.key_path, args.spark_url, args.java_url, args.java_min, args.java_max, silent=args.silent, retries=args.retries) if reservation else False

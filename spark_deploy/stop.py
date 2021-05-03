@@ -15,8 +15,8 @@ def _default_retries():
 
 
 def _stop_spark(remote_connection, installdir, workdir=None, silent=False, retries=5):
-    remote_connection.import_module(_spark_stop)
-    return remote_connection.stop_all(loc.sparkdir(installdir), workdir, silent, retries)
+    remote_module = remote_connection.import_module(_spark_stop)
+    return remote_module.stop_all(loc.sparkdir(installdir), workdir, silent, retries)
 
 
 def _merge_kwargs(x, y):
@@ -54,4 +54,9 @@ def stop(reservation, installdir, key_path, slave_workdir=_default_workdir(), si
             if not slave_future.result():
                 printe('Could not stop Spark slave on remote: {}'.format(node))
                 state_ok = False
-        return state_ok
+        if state_ok:
+            prints('Stopping Spark on all nodes succeeded.')
+            return True
+        else:
+            printe('Stopping Spark failed on some nodes.')
+            return False

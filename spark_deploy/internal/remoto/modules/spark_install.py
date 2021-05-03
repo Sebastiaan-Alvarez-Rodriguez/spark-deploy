@@ -1,3 +1,5 @@
+import builtins
+from enum import Enum
 import os
 import socket
 from pathlib import Path
@@ -7,12 +9,52 @@ import tempfile
 import urllib.request
 
 
-def stderr(string, *args, **kwargs):
-    kwargs['flush'] = True
-    kwargs['file'] = sys.stderr
-    print('[{}] {}'.format(socket.gethostname(), string), *args, **kwargs)
+'''In this file, we provide functions to install Apache Spark.'''
 
-'''In this file, we provide functions to install and interact with Apache Spark.'''
+
+##########################################################################################
+# Here, we copied the contents from internal.util.printer (as we cannot use local imports)
+def print(string, *args, **kwargs):
+    kwargs['flush'] = True
+    kwargs['file'] = sys.stderr  # Print everything to stderr!
+    return builtins.print('[{}] {}'.format(socket.gethostname(), string), *args, **kwargs)
+
+
+class Color(Enum):
+    '''An enum to specify what color you want your text to be'''
+    RED = '\033[1;31m'
+    GRN = '\033[1;32m'
+    YEL = '\033[1;33m'
+    BLU = '\033[1;34m'
+    PRP = '\033[1;35m'
+    CAN = '\033[1;36m'
+    CLR = '\033[0m'
+
+# Print given text with given color
+def printc(string, color, **kwargs):
+    print(format(string, color), **kwargs)
+
+# Print given success text
+def prints(string, color=Color.GRN, **kwargs):
+    print('[SUCCESS] {}'.format(format(string, color)), **kwargs)
+
+# Print given warning text
+def printw(string, color=Color.YEL, **kwargs):
+    print('[WARNING] {}'.format(format(string, color)), **kwargs)
+
+
+# Print given error text
+def printe(string, color=Color.RED, **kwargs):
+    print('[ERROR] {}'.format(format(string, color)), **kwargs)
+
+
+# Format a string with a color
+def format(string, color):
+    if os.name == 'posix':
+        return '{}{}{}'.format(color.value, string, Color.CLR.value)
+    return string
+
+##########################################################################################
 
 
 def _rm(directory, *args, ignore_errors=False):
@@ -49,7 +91,7 @@ def _is_installed(location):
     return os.path.isdir(location) and os.path.isdir(os.path.join(location, 'sbin'))
 
 
-def spark_install(location, url, retries):
+def spark_install(location, url, silent=False, retries=5):
     '''Installs Spark by downloading and installing from `.tgz`. Assumes extracted zip layout to look like:
     | some_dir/
     |           conf/
@@ -60,50 +102,49 @@ def spark_install(location, url, retries):
     Args:
         location (str): The location where final output will be available on success.
         url (str): URL of zip to download. Look e.g. in 'https://downloads.apache.org/spark/' for zips.
-        retries (int): Number of retries to use when downloading, extracting.
-
+        silent (optional bool): If set, prints less info.
+        retries (optional int): Number of retries to use when downloading, extracting.
     Returns:
         `True` on success, `False` on failure.'''
-    stderr('Beginning Spark install procedure')
+
     if _is_installed(location): # Already installed
+        if not silent:
+            print('Existing Spark installation detected. Skipping installation.')
         return True
 
     os.makedirs(location, exist_ok=True)
-    stderr('Installing Spark in {}'.format(location))
+    if not silent:
+        print('Installing Spark in {}...'.format(location))
 
     with tempfile.TemporaryDirectory() as tmpdir: # We use a tempfile to store the downloaded zip.
         archiveloc = os.path.join(tmpdir, 'spark.tgz')
-        if not os.path.isfile(archiveloc):
-            for x in range(retries):
-                try:
-                    _rm(archiveloc, ignore_errors=True)
-                    stderr('[{}] Fetching spark from {}'.format(x, url))
-                    urllib.request.urlretrieve(url, archiveloc)
-                    break
-                except Exception as e:
-                    if x == 0:
-                        stderr('Could not download Spark. Retrying...')
-                    elif x == 4:
-                        stderr('Could not download Spark: ', e)
-                        return False
         for x in range(retries):
             try:
-                extractloc = os.path.join(tmpdir, 'extracted')
-                os.makedirs(extractloc, exist_ok=True)
-                shutil.unpack_archive(archiveloc, extractloc)
-
-                extracted_dir = next(_ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
-                for x in _ls(extracted_dir, full_paths=True): # Move every file and directory to the final location.
-                    shutil.move(x, location)
-                stderr('installation completed')
-                return True
+                _rm(archiveloc, ignore_errors=True)
+                if not silent:
+                    print('Fetching spark from {}'.format(url))
+                urllib.request.urlretrieve(url, archiveloc)
+                break
             except Exception as e:
-                if x == 4:
-                    stderr('Could not download zip file correctly: ', e)
+                if x == 0:
+                    printe('Could not download Spark. Retrying...')
+                elif x == 4:
+                    printe('Could not download Spark: ', e)
                     return False
-                elif x == 0:
-                    stderr('Could not extract archive. Retrying...', e)
-    return False
+        try:
+            extractloc = os.path.join(tmpdir, 'extracted')
+            os.makedirs(extractloc, exist_ok=True)
+            shutil.unpack_archive(archiveloc, extractloc)
+
+            extracted_dir = next(_ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
+            for x in _ls(extracted_dir, full_paths=True): # Move every file and directory to the final location.
+                shutil.move(x, location)
+            if not silent:
+                prints('Spark installation completed.')
+            return True
+        except Exception as e:
+            printe('Could not download zip file correctly: ', e)
+            return False
 
 
 if __name__ == '__channelexec__': # In case we use this module with remoto legacy connections (local, ssh), we need this footer.

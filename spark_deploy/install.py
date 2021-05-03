@@ -1,5 +1,6 @@
 import concurrent.futures
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
+from internal.remoto.env import Environment as _Environment
 import internal.remoto.modules.spark_install as _spark_install
 import internal.remoto.modules.java_install as _java_install
 import internal.util.location as loc
@@ -17,23 +18,24 @@ def _default_java_min():
 def _default_java_max():
     return 0
 
+def _default_retries():
+    return 5
 
 def _default_use_sudo():
     return False
 
 
-def _install_spark(connection, installdir, spark_url, retries=5):
+def _install_spark(connection, installdir, spark_url, silent=False, retries=5):
     remote_module = connection.import_module(_spark_install)
-    return remote_module.spark_install(loc.sparkdir(installdir), spark_url, retries)
+    return remote_module.spark_install(loc.sparkdir(installdir), spark_url, silent, retries)
 
 
-def _install_java(connection, installdir, java_url, java_min, java_max, use_sudo, retries=5):
+def _install_java(connection, installdir, java_url, java_min, java_max, use_sudo, silent=False, retries=5):
     remote_module = connection.import_module(_java_install)
-
     if use_sudo:
-        return remote_module.java_install_sudo(java_min, java_max, retries)
+        return remote_module.java_install_sudo(java_min, java_max, silent, retries)
     else:
-        return remote_module.java_install_nonsudo(loc.java_nonroot_dir(installdir), java_url, java_min, java_max, retries)
+        return remote_module.java_install_nonsudo(loc.java_nonroot_dir(installdir), java_url, java_min, java_max, silent, retries)
 
 
 def _merge_kwargs(x, y):
@@ -42,7 +44,7 @@ def _merge_kwargs(x, y):
     return z
 
 
-def install(reservation, installdir, key_path, spark_url=_default_spark_url(), java_url=_default_java_url(), java_min=_default_java_min(), java_max=_default_java_max(), use_sudo=_default_use_sudo()):
+def install(reservation, installdir, key_path, spark_url=_default_spark_url(), java_url=_default_java_url(), java_min=_default_java_min(), java_max=_default_java_max(), use_sudo=_default_use_sudo(), silent=False, retries=_default_retries()):
     '''Install Spark and Java 11 on a reserved cluster. Does not reinstall if already present.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to install Spark on.
@@ -53,6 +55,8 @@ def install(reservation, installdir, key_path, spark_url=_default_spark_url(), j
         java_min (optional int): Minimal Java version to accept. 0 means no limit.
         java_max (optional int): Maximal Java version to accept. 0 means no limit.
         use_sudo (optional bool): If set, installs some libraries system-wide. Otherwise, performs local installation.
+        silent (optional bool): If set, we only print errors and critical info.
+        retries (optional int): Number of tries we try to download archives.
 
     Raises:
         Valuerror: When reservation contains 0 nodes or is `None`.
@@ -69,16 +73,15 @@ def install(reservation, installdir, key_path, spark_url=_default_spark_url(), j
             ssh_kwargs['IdentityFile'] = key_path
         else:
             printw('Connections have no assigned ssh key. Prepare to fill in your password often.')
-        futures_connection = [executor.submit(_get_ssh_connection, x.ip_public, silent=False, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes]
+        futures_connection = [executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes]
         connectionwrappers = [x.result() for x in futures_connection]
 
         if any(x for x in connectionwrappers if not x):
             printe('Could not connect to some nodes.')
             return False
 
-        futures_install_spark = {executor.submit(_install_spark, x.connection, installdir, spark_url): x for x in connectionwrappers}
-        futures_install_java = {executor.submit(_install_java, x.connection, installdir, java_url, java_min, java_max, use_sudo): x for x in connectionwrappers}
-        
+        futures_install_spark = {executor.submit(_install_spark, x.connection, installdir, spark_url, silent=silent, retries=retries): x for x in connectionwrappers}
+        futures_install_java = {executor.submit(_install_java, x.connection, installdir, java_url, java_min, java_max, use_sudo, silent=silent, retries=retries): x for x in connectionwrappers}
 
         state_ok = True
         for key, val in futures_install_spark.items():

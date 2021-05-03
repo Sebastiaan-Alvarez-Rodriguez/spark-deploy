@@ -10,8 +10,72 @@ import sys
 import tempfile
 import urllib.request
 
-'''In this file, we provide functions to install and interact with Apache Spark.'''
+'''In this file, we provide functions to install Java.'''
 
+
+##########################################################################################
+# Here, we copied the contents from internal.remoto.env
+class Environment(object):
+    '''Class to load and store persistent variables in a way that does not dependend on OS environment vars, login shells, shell types, etc.'''
+    def __init__(self):
+        self._entered = False
+
+        self._path = Environment.get_path()
+        os.makedirs(Environment.get_storedir(), exist_ok=True)
+        
+        import configparser
+        self.parser = configparser.ConfigParser()
+        self.parser.optionxform=str
+        if os.path.isfile(self._path):
+            self.parser.read(self._path)
+
+    @staticmethod
+    def get_path():
+        return os.path.join(Environment.get_storedir(), 'env.cfg')
+
+    @staticmethod
+    def get_storedir():
+        return os.path.join(os.getenv('HOME'), '.spark_deploy')
+
+
+    def get(self, key):
+        '''Getter, different from "env[key]"" in that it does not throw.
+        Returns:
+            Found value on success, `None` otherwise.'''
+        return self.parser['DEFAULT'][key] if key in self.parser['DEFAULT'] else None
+
+    def set(self, key, value):
+        '''Function to add a single key-valuepair. Note: For setting multiple keys, use a "with env:" block, followed by "env[key] = value" or "env.set(key, value)".'''
+        self.parser['DEFAULT'][key] = value
+        os.environ[key]= value
+        if not self._entered:
+            self.persist()
+
+    def persist(self):
+        with open(self._path, 'w') as file:
+            self.parser.write(file)
+
+
+    def __enter__(self):
+        self._entered = True
+        return self
+
+
+    def __getitem__(self, key):
+        return self.parser['DEFAULT'][key]
+
+
+    def __setitem__(self, key, value):
+        if not self._entered:
+            raise NotImplementedError('Cannot directly set Environment variables. Use "env.set()", or "with env:"')
+        else:
+            os.environ[key]= value
+            self.parser['DEFAULT'][key] = value
+
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.persist()
+        self._entered = False
 
 ##########################################################################################
 # Here, we copied the contents from internal.util.printer (as we cannot use local imports)
@@ -150,12 +214,12 @@ def java_home_available():
 
 
 def java_home():
-    return os.getenv('JAVA_HOME')
+    return env.get('JAVA_HOME') or os.getenv('JAVA_HOME')
 
 
 def set_java_home(path):
     '''Sets java path, both in ~/.bashrc and directly in the environment through python.'''
-    os.environ['JAVA_HOME'] = path
+    env.set('JAVA_HOME', path)
 
     bashrc_loc = os.path.expanduser('~/.bashrc')
     with open(bashrc_loc, 'r') as f:
@@ -215,13 +279,13 @@ def phase2(minversion, maxversion):
     return False
 
 
-def java_install_sudo(minversion, maxversion, retries):
-    return java_install(None, None, minversion, maxversion, True, retries)
+def java_install_sudo(minversion, maxversion, silent=False, retries=5):
+    return java_install(None, None, minversion, maxversion, True, silent, retries)
 
-def java_install_nonsudo(location, url, minversion, maxversion, retries):
-    return java_install(location, url, minversion, maxversion, False, retries)
+def java_install_nonsudo(location, url, minversion, maxversion, silent=False, retries=5):
+    return java_install(location, url, minversion, maxversion, False, silent, retries)
 
-def java_install(location=None, url=None, minversion=11, maxversion=0, use_sudo=False, retries=5):
+def java_install(location=None, url=None, minversion=11, maxversion=0, use_sudo=False, silent=False, retries=5):
     '''Checks if Java is already available. If not, installs Java by downloading and installing from `.tgz`. Assumes extracted zip layout to look like:
     | some_dir/
     |           bin/
@@ -236,13 +300,20 @@ def java_install(location=None, url=None, minversion=11, maxversion=0, use_sudo=
         maxversion (optional int): Maximal acceptable java version. 0 means no limit.
         use_sudo (optional bool): If set, sudo user rights are used to install system-wide Java distribution. Otherwise, installs locally.
         retries (optional int): Number of retries to use when downloading, extracting.
+        silent (optional bool): If set, prints less info.
 
     Returns:
         `True` on success, `False` on failure.'''
-    print('Beginning Java install procedure')
+
+    global env
+    env = Environment()
 
     if phase0(minversion, maxversion) or phase1(minversion, maxversion) or phase2(minversion, maxversion):
+        if not silent:
+            print('Acceptable existing Java installation detected. Skipping installation.')
         return True
+    if not silent:
+        print('Beginning Java install procedure')
 
     # Phase 3a: Java root installation
     if use_sudo:
@@ -265,40 +336,38 @@ def java_install(location=None, url=None, minversion=11, maxversion=0, use_sudo=
     else: # Phase 3b: Java local installation
         with tempfile.TemporaryDirectory() as tmpdir: # We use a tempfile to store the downloaded archive.
             archiveloc = os.path.join(tmpdir, 'java.tar.gz')
-            if not os.path.isfile(archiveloc):
-                for x in range(retries):
-                    try:
-                        _rm(archiveloc, ignore_errors=True)
-                        print('Fetching Java from {}'.format(url))
-                        urllib.request.urlretrieve(url, archiveloc)
-                        break
-                    except Exception as e:
-                        if x == 0:
-                            printw('Could not download Java. Retrying...')
-                        elif x == 4:
-                            printe('Could not download Java: {}'.format(e))
-                            return False
+            if not silent:
+                print('Fetching Java from {}'.format(url))
             for x in range(retries):
                 try:
-                    extractloc = os.path.join(tmpdir, 'extracted')
-                    os.makedirs(extractloc, exist_ok=True)
-                    shutil.unpack_archive(archiveloc, extractloc)
-
-                    extracted_dir = next(_ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
-                    _rm(location, ignore_errors=False)
-                    shutil.move(extracted_dir, location)        
-                    # extracted_dir = next(_ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
-                    # for x in _ls(extracted_dir, full_paths=True): # Move every file and directory to the final location.
-                    #     shutil.move(x, location)
+                    _rm(archiveloc, ignore_errors=True)
+                    urllib.request.urlretrieve(url, archiveloc)
+                    break
                 except Exception as e:
-                    if x == 4:
-                        printe('Could not download zip file correctly: {}'.format(e))
+                    if x == 0:
+                        printw('Could not download Java. Retrying...')
+                    elif x == retries-1:
+                        printe('Could not download Java: {}'.format(e))
                         return False
-                    elif x == 0:
-                        printw('Could not extract archive ({}). Retrying...'.format(e))
+            try:
+                extractloc = os.path.join(tmpdir, 'extracted')
+                os.makedirs(extractloc, exist_ok=True)
+                shutil.unpack_archive(archiveloc, extractloc)
+
+                extracted_dir = next(_ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
+            except Exception as e:
+                printe('Could not extract zip file correctly: {}'.format(e))
+                return False
+            try:
+                _rm(location, ignore_errors=True)
+                shutil.move(extracted_dir, location)
+            except Exception as e:
+                printe('Could not move extracted contents ({}) to ({}): {}'.format(extracted_dir, location, e))
+
             set_java_home(os.path.abspath(location))
             if java_acceptable_version(java_exec_get_versioninfo(java_home(), 'bin', 'java'), minversion, maxversion):
-                prints('installation completed.')
+                if not silent:
+                    prints('installation completed.')
                 return True
             else:
                 printe('Unexpected failure to configure newly downloaded "{}". Please point JAVA_HOME to the root installation directory yourself.'.format(location))

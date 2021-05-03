@@ -52,6 +52,14 @@ def format(string, color):
 ##########################################################################################
 
 
+def java_home_available():
+    return java_home() != None
+
+
+def java_home():
+    return os.getenv('JAVA_HOME')
+
+
 def start_master(sparkloc, host, port=7077, webui_port=8080, silent=False, retries=5, retries_sleep=5):
     '''Boots master on given node.
     Note: Spark works with Daemons, so expect to return quickly, probably even before the slave is actually ready.
@@ -79,10 +87,14 @@ def start_master(sparkloc, host, port=7077, webui_port=8080, silent=False, retri
         printe('Could not find file at {}. Did Spark not install successfully?'.format(scriptloc))
         return False
 
-    if not silent:
-        print('Spawning master...')
+    if not java_home_available():
+        printe('JAVA_HOME not found in the current environment.')
+        return False
 
-    cmd = '{} --host {} --port {} --webui-port {}'.format(scriptloc, host, port, webui_port)
+    if not silent:
+        print('Spawning master, using hostname {}...'.format(host))
+
+    cmd = '{} --host {} --port {} --webui-port {} 1>&2'.format(scriptloc, host, port, webui_port)
     kwargs = {'stderr': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL} if silent else {} 
     for x in range(retries):
         if subprocess.call(cmd, shell=True, **kwargs) == 0:
@@ -119,15 +131,16 @@ def start_slave(sparkloc, workdir, master_node, master_port=7077, silent=True, r
         printe('Could not find file at "{}". Did Spark not install successfully?'.format(scriptloc))
         return False
 
+    if not java_home_available():
+        printe('JAVA_HOME not found in the current environment.')
+        return False
+
     master_url = 'spark://{}:{}'.format(master_node, master_port)
 
-    # workdir = fs.join(loc.get_node_local_dir(), lid)
-    # fs.rm(workdir, ignore_errors=True)
-    # fs.mkdir(workdir)
     if not silent:
         print('Spawning slave')
 
-    cmd = '{} {} --work-dir {} {}'.format(scriptloc, master_url, workdir, '> /dev/null 2>&1' if silent else '')
+    cmd = '{} {} --work-dir {} {} 1>&2'.format(scriptloc, master_url, workdir, '> /dev/null 2>&1' if silent else '')
     kwargs = {'stderr': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL} if silent else {} 
     
     for x in range(retries):
