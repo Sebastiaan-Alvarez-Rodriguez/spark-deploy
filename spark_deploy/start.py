@@ -1,4 +1,5 @@
 import concurrent.futures
+import types
 
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import internal.remoto.modules.spark_start as _spark_start
@@ -7,20 +8,26 @@ from internal.util.printer import *
 
 
 def _default_workdir():
-    return '~/spark_workdir'
+    return './spark_workdir'
 
 def _default_retries():
     return 5
 
+def _default_masterport():
+    return 7077
 
-def _start_spark_master(remote_connection, installdir, port=7077, webui_port=2205, silent=False, retries=5):
-    remote_connection.import_module(_spark_start)
-    return remote_connection.boot_master(loc.sparkdir(installdir), port=port, webui_port=webui_port, silent=silent, retries=retries)
+def _default_webuiport():
+    return 8080
+
+
+def _start_spark_master(remote_connection, installdir, host, port=7077, webui_port=2205, silent=False, retries=5):
+    remote_module = remote_connection.import_module(_spark_start)
+    return remote_module.start_master(loc.sparkdir(installdir), host, port, webui_port, silent, retries)
 
 
 def _start_spark_slave(remote_connection, installdir, workdir, master_picked, master_port=7077, silent=False, retries=5):
-    remote_connection.import_module(_spark_start)
-    return remote_connection.boot_slave(loc.sparkdir(installdir), workdir, master_picked.ip_local, master_port, silent, retries)
+    remote_module = remote_connection.import_module(_spark_start)
+    return remote_module.start_slave(loc.sparkdir(installdir), workdir, master_picked.ip_local, master_port, silent, retries)
 
 
 def _get_master_and_slaves(reservation, master_id=None):
@@ -34,7 +41,7 @@ def _get_master_and_slaves(reservation, master_id=None):
     if len(reservation) == 1:
         return next(reservation.nodes), []
 
-    if master == None: # Pick node with lowest public ip value.
+    if master_id == None: # Pick node with lowest public ip value.
         tmp = sorted(reservation.nodes, key=lambda x: x.ip_public)
         return tmp[0], tmp[1:]
     return reservation.get_node(node_id=master_id), [x for x in reservation.nodes if x.node_id != master_id]
@@ -46,13 +53,21 @@ def _merge_kwargs(x, y):
     return z
 
 
-def start(reservation, installdir, key_path, master_id=None, slave_workdir=_default_workdir(), silent=False, retries=_default_retries()):
+def start(reservation, installdir, key_path, master_id=None, master_host=None, master_port=_default_masterport(), webui_port=_default_webuiport(), slave_workdir=_default_workdir(), silent=False, retries=_default_retries()):
     '''Boot Spark on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start Spark on.
         installdir (str): Location on remote host where Spark (and any local-installed Java) is installed in.
         key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
         master_id (optional int): Node id that must become the master. If `None`, the node with lowest public ip value (string comparison) will be picked.
+        master_host (str or function or lambda): IP/Hostname to listen to. 
+            Warning: If a globally accessible ip/hostname is set (e.g. 0.0.0.0), then Spark is reachable from the public internet.
+                     In such cases, make sure that the Spark `master_port` is not accessible in your firewall, so others cannot submit jobs to run on your hardware.
+                     For increased privacy, also ensure `webui_port` is not accessible, so others cannot review node logs, cluster status etc.
+            If str, listens to given IP/hostname.
+            If function or lambda, passes the node selected as master, and requires an IP/hostname str back to listen to.
+        master_port (optional int): port to use for master.
+        webui_port (optional int): port for Spark webUI to use.
         slave_workdir (optional str): Path to Spark workdir location for all slave daemons.
         silent (optional bool): If set, we only print errors and critical info (e.g. spark master url). Otherwise, more verbose output.
         retries (optional int): Number of tries we try to connect to the master.
@@ -73,15 +88,23 @@ def start(reservation, installdir, key_path, master_id=None, slave_workdir=_defa
         futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes}
         connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
 
-        future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, installdir, port=master_port, webui_port=webui_port, silent=False, retries=5)
+        if callable(master_host):
+            master_host = master_host(master_picked)
+
+        future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, installdir, master_host, port=master_port, webui_port=webui_port, silent=False, retries=5)
         if not future_spark_master.result():
             printe('Could not start Spark master on node: {}'.format(master_picked))
             return False
 
         futures_spark_slaves = {node: executor.submit(_start_spark_slave, conn_wrapper.connection, installdir, slave_workdir, master_picked, master_port=master_port, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
-        for node, slave_future in futures_start_spark.items():
+        for node, slave_future in futures_spark_slaves.items():
             if not slave_future.result():
                 printe('Could not start Spark slave on remote: {}'.format(node))
                 state_ok = False
-        return state_ok
+        if state_ok:
+            prints('Starting Spark on all nodes succeeded.')
+            return True
+        else:
+            printe('Starting Spark failed on some nodes.')
+            return False

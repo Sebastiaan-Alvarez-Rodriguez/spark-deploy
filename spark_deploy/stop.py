@@ -7,7 +7,7 @@ from internal.util.printer import *
 
 
 def _default_workdir():
-    return '~/spark_workdir'
+    return './spark_workdir'
 
 
 def _default_retries():
