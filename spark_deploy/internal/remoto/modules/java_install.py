@@ -51,6 +51,11 @@ class Environment(object):
         if not self._entered:
             self.persist()
 
+    def load_to_env(self):
+        '''Loads all stored variables into the process environment.'''
+        for key, value in self.parser['DEFAULT'].items():
+            os.environ[key] = value
+
     def persist(self):
         with open(self._path, 'w') as file:
             self.parser.write(file)

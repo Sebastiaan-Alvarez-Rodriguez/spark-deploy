@@ -1,6 +1,7 @@
 import builtins
 from enum import Enum
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -69,24 +70,30 @@ def _rm(directory, *args, ignore_errors=False):
             os.remove(path)
 
 
-def _terminate_daemons(sparkloc, silent, retries, retries_sleep):
-    if not os.path.isdir(sparkloc):
-        printe('Could not find Spark installation at {}. Did you run the `install` command for that location?'.format(sparkloc))
-        return False
-
-    scriptloc = os.path.join(sparkloc, 'sbin', 'stop-all.sh')
+def _terminate_daemon(scriptloc, silent, retries, retries_sleep):
     if not os.path.isfile(scriptloc):
         printe('Could not find file at {}. Did Spark not install successfully?'.format(scriptloc))
         return False
 
-    cmd = scriptloc
-    kwargs = {'stderr': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL} if silent else {} 
+    cmd = 'bash {} 1>&2'.format(scriptloc)
     for x in range(retries):
-        if subprocess.call(cmd, shell=True, **kwargs) == 0:
+        try:
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode('utf-8').strip()
             return True
+        except subprocess.CalledProcessError as e:
+            if re.search('no .* to stop', e.output): # There is no real problem. The node just does not currently run the daemon, which is fine.
+                return True
+            if x == 0:
+                printw('Could not execute {}: {}'.format(scriptloc, e))
         time.sleep(retries_sleep)
-    printe('Could not terminate all daemons!')
     return False
+
+
+def _terminate_daemons(sparkloc, silent, retries, retries_sleep):
+    if not os.path.isdir(sparkloc):
+        printe('Could not find Spark installation at {}. Did you run the `install` command for that location?'.format(sparkloc))
+        return False
+    return all(_terminate_daemon(x, silent, retries, retries_sleep) for x in [os.path.join(sparkloc, 'sbin', 'stop-worker.sh'), os.path.join(sparkloc, 'sbin', 'stop-master.sh')])
 
 
 def stop_all(sparkloc, workdir=None, silent=False, retries=5, retries_sleep=5):
