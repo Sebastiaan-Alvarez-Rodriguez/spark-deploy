@@ -1,6 +1,5 @@
 import cli.util as _cli_util
 import uninstall as _uninstall
-from internal.util.printer import *
 
 
 '''CLI module to uninstall Spark and Java from a cluster.'''

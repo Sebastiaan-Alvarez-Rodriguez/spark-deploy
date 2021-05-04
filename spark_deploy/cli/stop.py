@@ -5,7 +5,7 @@ import cli.util as _cli_util
 import stop as _stop
 
 
-'''CLI module to start a cluster.'''
+'''CLI module to stop a Spark cluster.'''
 
 
 def _cached(response, cached_val):

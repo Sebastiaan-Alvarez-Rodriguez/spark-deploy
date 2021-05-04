@@ -1,6 +1,5 @@
 import cli.util as _cli_util
 import install as _install
-from internal.util.printer import *
 
 
 '''CLI module to install Spark and Java on a cluster.'''

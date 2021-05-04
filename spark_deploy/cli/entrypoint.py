@@ -3,8 +3,8 @@ import argparse
 import os
 import sys
 
-'''Python CLI module to deploy Spark on GENI resources.'''
 
+'''Python CLI module to deploy Spark on metareserve-allocated resources.'''
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__)))) # Appends main project root as importpath.
 
