@@ -1,5 +1,5 @@
 import concurrent.futures
-from internal.remoto.env import Environment as _Environment
+
 from internal.remoto.modulegenerator import ModuleGenerator
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import internal.util.fs as fs
@@ -49,7 +49,7 @@ def _generate_module_spark(silent=False):
         fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'remoto_base.py'),
     ]
     ModuleGenerator().with_module(fs).with_files(*files).generate(generation_loc, silent)
-    return importer.import_full_path(generation_loc)    
+    return importer.import_full_path(generation_loc)
 
 
 def generate_module_java(silent=False):    
@@ -109,6 +109,7 @@ def install(reservation, installdir, key_path, spark_url=_default_spark_url(), j
 
         spark_module = _generate_module_spark()
         java_module = generate_module_java()
+
         futures_install_spark = {executor.submit(_install_spark, x.connection, spark_module, installdir, spark_url, silent=silent, retries=retries): x for x in connectionwrappers}
         futures_install_java = {executor.submit(_install_java, x.connection, java_module, installdir, java_url, java_min, java_max, use_sudo, silent=silent, retries=retries): x for x in connectionwrappers}
 
