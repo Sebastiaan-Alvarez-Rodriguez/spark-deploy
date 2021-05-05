@@ -3,8 +3,10 @@ from internal.remoto.util import get_ssh_connection as _get_ssh_connection
 from internal.remoto.env import Environment as _Environment
 import internal.remoto.modules.spark_install as _spark_install
 import internal.remoto.modules.java_install as _java_install
+import internal.util.fs as fs
 import internal.util.location as loc
 from internal.util.printer import *
+from internal.remoto.modulegenerator import ModuleGenerator
 
 def _default_spark_url():
     return 'https://downloads.apache.org/spark/spark-3.1.1/spark-3.1.1-bin-hadoop2.7.tgz'
@@ -66,6 +68,10 @@ def install(reservation, installdir, key_path, spark_url=_default_spark_url(), j
     if not reservation or len(reservation) == 0:
         raise ValueError('Reservation does not contain any items'+(' (reservation=None)' if not reservation else ''))
 
+
+    import internal.util.printer as printer
+    generator = ModuleGenerator().with_modules(printer, fs).generate(fs.join(fs.abspath(__file__), 'modules', 'generated', 'test.py'))
+    return False
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(reservation)) as executor:
         ssh_kwargs = {'IdentitiesOnly': 'yes', 'StrictHostKeyChecking': 'no'}

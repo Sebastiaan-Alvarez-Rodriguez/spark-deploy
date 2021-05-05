@@ -6,7 +6,7 @@ import start as _start
 
 def subparser(subparsers):
     '''Register subparser modules'''
-    startparser = subparsers.add_parser('start', help='Orchestrate Spark environment on server cluster.')
+    startparser = subparsers.add_parser('start', help='Start Spark on server cluster.')
     startparser.add_argument('--master', metavar='id', dest='master_id', type=int, default=None, help='ID of the node that will be the master node.')
     startparser.add_argument('--workdir', metavar='path', type=str, default=_start._default_workdir(), help='Path to Spark workdir location for all slave daemons (default={}). Note: The home directory of the remote machines is prepended to this path if it is relative.'.format(_start._default_workdir()))
     startparser.add_argument('--master-host', metavar='host', dest='master_host', type=str, default=None, help='Master hostname to listen on.')

@@ -6,7 +6,7 @@ import install as _install
 
 def subparser(subparsers):
     '''Register subparser modules'''
-    installparser = subparsers.add_parser('install', help='Orchestrate Spark environment on server cluster.')
+    installparser = subparsers.add_parser('install', help='Install Spark environment on server cluster.')
     installparser.add_argument('--spark-url', dest='spark_url', type=str, default=_install._default_spark_url(), help='Spark download URL.')
     installparser.add_argument('--java-url', dest='java_url', type=str, default=_install._default_java_url(), help='Java download URL. Make sure the downloaded version is acceptable (between [`java-min`, `java-max`])')
     installparser.add_argument('--java-min', dest='java_min', type=int, default=_install._default_java_min(), help='Java minimal version (default={}). 0 means "no limit". use this to ensure a recent-enough version is installed for use with your Spark version.'.format(_install._default_java_min()))
