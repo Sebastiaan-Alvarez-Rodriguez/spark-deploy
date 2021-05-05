@@ -1,163 +1,11 @@
-import builtins
-from enum import Enum
 import os
-from pathlib import Path
 import re
 import shutil
-import socket
 import subprocess
-import sys
 import tempfile
 import urllib.request
 
 '''In this file, we provide functions to install Java.'''
-
-
-##########################################################################################
-# Here, we copied the contents from internal.remoto.env
-class Environment(object):
-    '''Class to load and store persistent variables in a way that does not dependend on OS environment vars, login shells, shell types, etc.'''
-    def __init__(self):
-        self._entered = False
-
-        self._path = Environment.get_path()
-        os.makedirs(Environment.get_storedir(), exist_ok=True)
-        
-        import configparser
-        self.parser = configparser.ConfigParser()
-        self.parser.optionxform=str
-        if os.path.isfile(self._path):
-            self.parser.read(self._path)
-
-    @staticmethod
-    def get_path():
-        return os.path.join(Environment.get_storedir(), 'env.cfg')
-
-    @staticmethod
-    def get_storedir():
-        return os.path.join(os.getenv('HOME'), '.spark_deploy')
-
-
-    def get(self, key):
-        '''Getter, different from "env[key]"" in that it does not throw.
-        Returns:
-            Found value on success, `None` otherwise.'''
-        return self.parser['DEFAULT'][key] if key in self.parser['DEFAULT'] else None
-
-    def set(self, key, value):
-        '''Function to add a single key-valuepair. Note: For setting multiple keys, use a "with env:" block, followed by "env[key] = value" or "env.set(key, value)".'''
-        self.parser['DEFAULT'][key] = value
-        os.environ[key]= value
-        if not self._entered:
-            self.persist()
-
-    def load_to_env(self):
-        '''Loads all stored variables into the process environment.'''
-        for key, value in self.parser['DEFAULT'].items():
-            os.environ[key] = value
-
-    def persist(self):
-        with open(self._path, 'w') as file:
-            self.parser.write(file)
-
-
-    def __enter__(self):
-        self._entered = True
-        return self
-
-
-    def __getitem__(self, key):
-        return self.parser['DEFAULT'][key]
-
-
-    def __setitem__(self, key, value):
-        if not self._entered:
-            raise NotImplementedError('Cannot directly set Environment variables. Use "env.set()", or "with env:"')
-        else:
-            os.environ[key]= value
-            self.parser['DEFAULT'][key] = value
-
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.persist()
-        self._entered = False
-
-##########################################################################################
-# Here, we copied the contents from internal.util.printer (as we cannot use local imports)
-def print(string, *args, **kwargs):
-    kwargs['flush'] = True
-    kwargs['file'] = sys.stderr  # Print everything to stderr!
-    return builtins.print('[{}] {}'.format(socket.gethostname(), string), *args, **kwargs)
-
-
-class Color(Enum):
-    '''An enum to specify what color you want your text to be'''
-    RED = '\033[1;31m'
-    GRN = '\033[1;32m'
-    YEL = '\033[1;33m'
-    BLU = '\033[1;34m'
-    PRP = '\033[1;35m'
-    CAN = '\033[1;36m'
-    CLR = '\033[0m'
-
-# Print given text with given color
-def printc(string, color, **kwargs):
-    print(format(string, color), **kwargs)
-
-# Print given success text
-def prints(string, color=Color.GRN, **kwargs):
-    print('[SUCCESS] {}'.format(format(string, color)), **kwargs)
-
-# Print given warning text
-def printw(string, color=Color.YEL, **kwargs):
-    print('[WARNING] {}'.format(format(string, color)), **kwargs)
-
-
-# Print given error text
-def printe(string, color=Color.RED, **kwargs):
-    print('[ERROR] {}'.format(format(string, color)), **kwargs)
-
-
-# Format a string with a color
-def format(string, color):
-    if os.name == 'posix':
-        return '{}{}{}'.format(color.value, string, Color.CLR.value)
-    return string
-
-##########################################################################################
-
-
-def _rm(directory, *args, ignore_errors=False):
-    path = os.path.join(directory, *args)
-    if os.path.isdir(path):
-        shutil.rmtree(path, ignore_errors=ignore_errors)
-    else:
-        if ignore_errors:
-            try:
-                os.remove(path)
-            except Exception as e:
-                pass
-        else:
-            os.remove(path)
-
-def _ls(directory, only_files=False, only_dirs=False, full_paths=False, *args):
-    ddir = os.path.join(directory, *args)
-    if only_files and only_dirs:
-        raise ValueError('Cannot ls only files and only directories')
-
-    if sys.version_info >= (3, 5): # Use faster implementation in python 3.5 and above
-        with os.scandir(ddir) as it:
-            for entry in it:
-                if (entry.is_dir() and not only_files) or (entry.is_file() and not only_dirs):
-                    yield os.path.join(ddir, entry.name) if full_paths else entry.name
-    else: # Use significantly slower implementation available in python 3.4 and below
-        for entry in os.listdir(ddir):
-            if (isdir(ddir, entry) and not only_files) or (os.path.isfile(ddir, entry) and not only_dirs):
-                yield os.path.join(ddir, entry) if full_paths else entry
-
-
-def _resolvelink(path, *args):
-    str(Path(os.path.join(path, *args)).resolve().absolute())
 
 
 def java_exec_get_versioninfo(java_exec, *args):
@@ -170,18 +18,18 @@ def java_exec_get_versioninfo(java_exec, *args):
 
     Returns:
         Raw decoded CLI version output for given executable.'''
-    return subprocess.check_output('{} -version 2>&1'.format(os.path.join(java_exec, *args)), shell=True).decode('utf-8').strip()
+    return subprocess.check_output('{} -version 2>&1'.format(join(java_exec, *args)), shell=True).decode('utf-8').strip()
 
 
 def java_installed(location):
     '''Check if Java is installed in given directory.'''
-    return os.path.isdir(location) and os.path.isfile(os.path.join(location, 'bin', 'java'))
+    return isdir(location) and isfile(join(location, 'bin', 'java'))
 
 
 def java_shell_resolvepath():
     '''Returns the actual (non-symlink) path to which the java shell resolves.'''
     path = subprocess.check_output('which java', shell=True).decode('utf-8').strip()
-    return _resolvelink(path) if os.path.islink(path) else path
+    return resolvelink(path, full_resolve=True) if issymlink(path) else path
 
 
 def java_shell_available():
@@ -195,13 +43,13 @@ def java_shell_available():
 
 def java_root_paths():
     '''Returns generator for every Java root installation.'''
-    return (x for x in _ls(os.path.join(os.path.abspath(os.sep), 'usr', 'lib', 'jvm'), only_dirs=True, full_paths=True) if java_installed(x))
+    return (x for x in ls(join(abspath(os.sep), 'usr', 'lib', 'jvm'), only_dirs=True, full_paths=True) if java_installed(x))
 
 
 def java_root_available():
     '''Returns whether at least one Java installation is available as a root installation.'''
-    path = os.path.join(os.path.abspath(os.sep), 'usr', 'lib', 'jvm')
-    if not os.path.isdir(path):
+    path = join(abspath(os.sep), 'usr', 'lib', 'jvm')
+    if not isdir(path):
         return False
     for x in _ls(path, only_dirs=True, full_paths=True):
         if java_installed(x):
@@ -254,9 +102,10 @@ def phase1(minversion, maxversion):
     if java_shell_available() and java_acceptable_version(java_exec_get_versioninfo('java'), minversion, maxversion): 
         # Java is available on shell. We might have to set `JAVA_HOME` to the right place.
         java_shell_path = java_shell_resolvepath()
+        java_shell_path = dirname(dirname(java_shell_path)) # Go from <java_loc>/bin/java to <java_loc>
         if java_home_available():
             if (java_shell_path != java_home()): # `JAVA_HOME` is set, but to an incorrect path.
-                printw('Found JAVA_HOME={}, version mismatched requirements. Set to matching location={}'.format(java_home(), java_shell_path), file=sys.stderr)
+                printw('Found JAVA_HOME={}, version mismatched requirements. Set to matching location={}'.format(java_home(), java_shell_path))
                 set_java_home(java_shell_path)
             else: # `JAVA_HOME` is already set correctly. Impossible. We just checked this in phase0. External tampering. Doesn't matter, `JAVA_HOME` is set correctly now.
                 pass
@@ -274,7 +123,7 @@ def phase2(minversion, maxversion):
                 prints('Found Java in: {}'.format(x))
                 if java_home_available():
                     if (x != java_home()): # `JAVA_HOME` is set, but to an incorrect path.
-                        printw('Found JAVA_HOME={}, version mismatched requirements. Set to matching location={}'.format(java_home(), x), file=sys.stderr)
+                        printw('Found JAVA_HOME={}, version mismatched requirements. Set to matching location={}'.format(java_home(), x))
                         set_java_home(x)
                     else: # `JAVA_HOME` is already set correctly. Impossible. We just checked this in phase0. External tampering. Doesn't matter, `JAVA_HOME` is set correctly now.
                         pass
@@ -340,12 +189,12 @@ def java_install(location=None, url=None, minversion=11, maxversion=0, use_sudo=
             return False
     else: # Phase 3b: Java local installation
         with tempfile.TemporaryDirectory() as tmpdir: # We use a tempfile to store the downloaded archive.
-            archiveloc = os.path.join(tmpdir, 'java.tar.gz')
+            archiveloc = join(tmpdir, 'java.tar.gz')
             if not silent:
                 print('Fetching Java from {}'.format(url))
             for x in range(retries):
                 try:
-                    _rm(archiveloc, ignore_errors=True)
+                    rm(archiveloc, ignore_errors=True)
                     urllib.request.urlretrieve(url, archiveloc)
                     break
                 except Exception as e:
@@ -355,21 +204,21 @@ def java_install(location=None, url=None, minversion=11, maxversion=0, use_sudo=
                         printe('Could not download Java: {}'.format(e))
                         return False
             try:
-                extractloc = os.path.join(tmpdir, 'extracted')
-                os.makedirs(extractloc, exist_ok=True)
+                extractloc = join(tmpdir, 'extracted')
+                mkdir(extractloc, exist_ok=True)
                 shutil.unpack_archive(archiveloc, extractloc)
 
-                extracted_dir = next(_ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
+                extracted_dir = next(ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
             except Exception as e:
                 printe('Could not extract zip file correctly: {}'.format(e))
                 return False
             try:
-                _rm(location, ignore_errors=True)
-                shutil.move(extracted_dir, location)
+                rm(location, ignore_errors=True)
+                mv(extracted_dir, location)
             except Exception as e:
                 printe('Could not move extracted contents ({}) to ({}): {}'.format(extracted_dir, location, e))
 
-            set_java_home(os.path.abspath(location))
+            set_java_home(abspath(location))
             if java_acceptable_version(java_exec_get_versioninfo(java_home(), 'bin', 'java'), minversion, maxversion):
                 if not silent:
                     prints('installation completed.')

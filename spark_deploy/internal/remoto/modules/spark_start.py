@@ -1,125 +1,7 @@
-import builtins
-from enum import Enum
 import os
-import socket
 import subprocess
 import sys
 import time
-
-##########################################################################################
-# Here, we copied the contents from internal.remoto.env
-class Environment(object):
-    '''Class to load and store persistent variables in a way that does not dependend on OS environment vars, login shells, shell types, etc.'''
-    def __init__(self):
-        self._entered = False
-
-        self._path = Environment.get_path()
-        os.makedirs(Environment.get_storedir(), exist_ok=True)
-        
-        import configparser
-        self.parser = configparser.ConfigParser()
-        self.parser.optionxform=str
-        if os.path.isfile(self._path):
-            self.parser.read(self._path)
-
-    @staticmethod
-    def get_path():
-        return os.path.join(Environment.get_storedir(), 'env.cfg')
-
-    @staticmethod
-    def get_storedir():
-        return os.path.join(os.getenv('HOME'), '.spark_deploy')
-
-
-    def get(self, key):
-        '''Getter, different from "env[key]" in that it does not throw.
-        Returns:
-            Found value on success, `None` otherwise.'''
-        return self.parser['DEFAULT'][key] if key in self.parser['DEFAULT'] else None
-
-    def set(self, key, value):
-        '''Function to add a single key-valuepair. Note: For setting multiple keys, use a "with env:" block, followed by "env[key] = value" or "env.set(key, value)".'''
-        self.parser['DEFAULT'][key] = value
-        os.environ[key]= value
-        if not self._entered:
-            self.persist()
-
-    def load_to_env(self):
-        '''Loads all stored variables into the process environment.'''
-        for key, value in self.parser['DEFAULT'].items():
-            os.environ[key] = value
-
-    def persist(self):
-        with open(self._path, 'w') as file:
-            self.parser.write(file)
-
-
-    def __enter__(self):
-        self._entered = True
-        return self
-
-
-    def __getitem__(self, key):
-        return self.parser['DEFAULT'][key]
-
-
-    def __setitem__(self, key, value):
-        if not self._entered:
-            raise NotImplementedError('Cannot directly set Environment variables. Use "env.set()", or "with env:"')
-        else:
-            os.environ[key]= value
-            self.parser['DEFAULT'][key] = value
-
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.persist()
-        self._entered = False
-
-##########################################################################################
-
-##########################################################################################
-# Here, we copied the contents from internal.util.printer (as we cannot use local imports)
-def print(string, *args, **kwargs):
-    kwargs['flush'] = True
-    kwargs['file'] = sys.stderr  # Print everything to stderr!
-    return builtins.print('[{}] {}'.format(socket.gethostname(), string), *args, **kwargs)
-
-
-class Color(Enum):
-    '''An enum to specify what color you want your text to be'''
-    RED = '\033[1;31m'
-    GRN = '\033[1;32m'
-    YEL = '\033[1;33m'
-    BLU = '\033[1;34m'
-    PRP = '\033[1;35m'
-    CAN = '\033[1;36m'
-    CLR = '\033[0m'
-
-# Print given text with given color
-def printc(string, color, **kwargs):
-    print(format(string, color), **kwargs)
-
-# Print given success text
-def prints(string, color=Color.GRN, **kwargs):
-    print('[SUCCESS] {}'.format(format(string, color)), **kwargs)
-
-# Print given warning text
-def printw(string, color=Color.YEL, **kwargs):
-    print('[WARNING] {}'.format(format(string, color)), **kwargs)
-
-
-# Print given error text
-def printe(string, color=Color.RED, **kwargs):
-    print('[ERROR] {}'.format(format(string, color)), **kwargs)
-
-
-# Format a string with a color
-def format(string, color):
-    if os.name == 'posix':
-        return '{}{}{}'.format(color.value, string, Color.CLR.value)
-    return string
-
-##########################################################################################
 
 
 def java_home_available():
@@ -150,12 +32,12 @@ def start_master(sparkloc, host, port=7077, webui_port=8080, silent=False, retri
         `True` on success, `False` otherwise.'''
     env = Environment()
     env.load_to_env()
-    if not os.path.isdir(sparkloc):
+    if not isdir(sparkloc):
         printe('Could not find Spark installation at {}. Did you run the `install` command for that location?'.format(sparkloc))
         return False
 
-    scriptloc = os.path.join(sparkloc, 'sbin', 'start-master.sh')
-    if not os.path.isfile(scriptloc):
+    scriptloc = join(sparkloc, 'sbin', 'start-master.sh')
+    if not isfile(scriptloc):
         printe('Could not find file at {}. Did Spark not install successfully?'.format(scriptloc))
         return False
 
@@ -196,12 +78,12 @@ def start_slave(sparkloc, workdir, master_node, master_port=7077, silent=False, 
         `True` on success, `False` otherwise.'''
     env = Environment()
     env.load_to_env()
-    if not os.path.isdir(sparkloc):
+    if not isdir(sparkloc):
         printe('Could not find Spark installation at {}. Did you run the `install` command for that location?'.format(sparkloc))
         return False
 
-    scriptloc = os.path.join(sparkloc, 'sbin', 'start-worker.sh')
-    if not os.path.isfile(scriptloc):
+    scriptloc = join(sparkloc, 'sbin', 'start-worker.sh')
+    if not isfile(scriptloc):
         printe('Could not find file at "{}". Did Spark not install successfully?'.format(scriptloc))
         return False
 
@@ -225,8 +107,3 @@ def start_slave(sparkloc, workdir, master_node, master_port=7077, silent=False, 
         time.sleep(retries_sleep)
     printe('Could not boot slave (failed {} times, {} sleeptime between executions)'.format(retries, retries_sleep))
     return False
-
-
-if __name__ == '__channelexec__': # In case we use this module with remoto legacy connections (local, ssh), we need this footer.
-    for item in channel:
-        channel.send(eval(item))

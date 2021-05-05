@@ -1,8 +1,10 @@
 import concurrent.futures
 
+from internal.remoto.modulegenerator import ModuleGenerator
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
-import internal.remoto.modules.spark_stop as _spark_stop
+import internal.util.fs as fs
 import internal.util.location as loc
+import internal.util.importer as importer
 from internal.util.printer import *
 
 
@@ -14,9 +16,22 @@ def _default_retries():
     return 5
 
 
-def _stop_spark(remote_connection, installdir, workdir=None, silent=False, retries=5):
-    remote_module = remote_connection.import_module(_spark_stop)
+def _stop_spark(remote_connection, module, installdir, workdir=None, silent=False, retries=5):
+    remote_module = remote_connection.import_module(module)
     return remote_module.stop_all(loc.sparkdir(installdir), workdir, silent, retries)
+
+
+def _generate_module_stop(silent=False):
+    '''Generates Spark-stop module from available sources.'''
+    generation_loc = fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'generated', 'start_spark.py')
+    files = [
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'util', 'printer.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'printer.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'spark_stop.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'remoto_base.py'),
+    ]
+    ModuleGenerator().with_module(fs).with_files(*files).generate(generation_loc, silent)
+    return importer.import_full_path(generation_loc)
 
 
 def _merge_kwargs(x, y):
@@ -48,7 +63,9 @@ def stop(reservation, installdir, key_path, slave_workdir=_default_workdir(), si
         futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes}
         connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
 
-        futures_spark_stop = {node: executor.submit(_stop_spark, conn_wrapper.connection, installdir, workdir=slave_workdir, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
+        stop_module = _generate_module_stop()
+
+        futures_spark_stop = {node: executor.submit(_stop_spark, conn_wrapper.connection, stop_module, installdir, workdir=slave_workdir, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
         for node, slave_future in futures_spark_stop.items():
             if not slave_future.result():

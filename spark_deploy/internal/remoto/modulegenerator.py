@@ -1,8 +1,12 @@
+import distutils.sysconfig as sysconfig
 import itertools
+import internal.util.fs as fs
 import os
 import re
+import sys
 import types
 
+from internal.util.printer import *
 '''
 Idea 0: Use lint on a file for imports. Once we need to generate a module, containing input modules x, y, z, we read x, y, z for the lints, and add the content recursively to the file.
 Idea 1: Just manually specify the modules to write.
@@ -14,21 +18,25 @@ Potential problems:
 '''
 
 
-def _generate_stl_libs(include_underscored=False):
-    '''Generator for stl-names.
-    Taken from: https://stackoverflow.com/a/61780780'''
-    standard_lib_dir = os.path.dirname(os.__file__)
-    for filename in os.listdir(standard_lib_dir):
-        if not include_underscored and filename.startswith('_'):
-            continue
-        filepath = os.path.join(standard_lib_dir, filename)
-        name, ext = os.path.splitext(filename)
-        if filename.endswith('.py') and os.path.isfile(filepath):
-            if str.isidentifier(name):
-                yield name
-        elif os.path.isdir(filepath) and '__init__.py' in os.listdir(filepath):
-            yield name
 
+def _generate_stl_libs():
+    '''Generator for stl-names. Does a breadth-first search on the python installation directory. Adds built-in library names.
+    Returns:
+        `set(str)` containing all known standard-library files.'''
+    ret_list = set()
+    std_lib = sysconfig.get_python_lib(standard_lib=True)
+    std_lib_len = len(std_lib)
+
+    to_visit = list()
+    to_visit.append(std_lib)
+    found = set()
+    while any(to_visit):
+        visit_now = to_visit.pop()
+        to_visit += list(fs.ls(visit_now, only_dirs=True, full_paths=True))
+        found.update(set('.'.join(y[std_lib_len+1:].split(os.path.sep))[:-3] for y in fs.ls(visit_now, only_files=True, full_paths=True) if y[-3:] == '.py' and y[-11:-3] != '__init__'))
+
+    found.update(set(sys.builtin_module_names))
+    return found
 
 
 class ModuleGenerator(object):
@@ -47,7 +55,7 @@ class ModuleGenerator(object):
             raise ValueError('Require a module!')
         if self._is_regular_python(module.__name__):
             raise ValueError('We do not export stl modules. Given stl module: "{}"'.format(module.__name__))
-            self._files.append(module.__file__)
+        self._files.append(module.__file__)
         return self
 
     def with_modules(self, *modules):
@@ -81,37 +89,42 @@ class ModuleGenerator(object):
             `(set, set)`: The first set contains all found stl import names using format 'import x', with elements `x`.
                           The second set contains all found stl import names using format 'from x import y (as z)', with elements `(x, y)` and `(x, y, z)`.'''
         regex_import = re.compile(r'^ *import +([a-zA-Z\._0-9]+)', re.MULTILINE)
-        regex_from_import = re.compile(r'^ *from +([a-zA-Z\._0-9]+) import +([a-zA-Z\._0-9]+) +(?:as)? +([a-zA-Z\._0-9]+)?', re.MULTILINE)
+        regex_from_import = re.compile(r'^ *from +([a-zA-Z\._0-9]+) import +([a-zA-Z\._0-9]+) *(?:as)? *([a-zA-Z\._0-9]+)?', re.MULTILINE)
         found_stl_imports = set()
         found_stl_import_froms = set()
 
         for x in self._files:
             with open(x, 'r') as f:
                 lines = f.read()
+
                 for match in itertools.chain(regex_import.finditer(lines), regex_from_import.finditer(lines)):
-                    match_importmodule = match[0] if isinstance(match, tuple) else match
+                    matchtuple = match.groups()
+                    match_importmodule = matchtuple[0]
+
                     if not self._is_regular_python(match_importmodule):
                         if not silent:
                             printw('(file: {}) Found non-regular import "{}".'.format(x, match_importmodule))
                     else:
-                        if isinstance(match, tuple):
-                            found_stl_import_froms.add(match)
+                        if len(matchtuple) > 1:
+                            found_stl_import_froms.add(matchtuple)
                         else:
-                            found_stl_modules.add(y)
+                            found_stl_imports.add(matchtuple[0])
+        if not any(found_stl_import_froms):
+            raise ValueError('Empty from sequence.')
         return found_stl_imports, found_stl_import_froms
 
 
     def _read_non_imports(self, filepath):
         '''Reads given `filepath`, strips lines containing Python import statements (careful with comments, don't use multiline statements with ';'), returns as generator.'''
         regex_no_import = re.compile(r'^((?!(?:from .+)? *import.*).)+$', re.MULTILINE)
-        with open(x, 'r') as f:
+        with open(filepath, 'r') as f:
             lines = f.read()
-            yield ''.join(regex_no_import.finditer(lines))
+            return '\n'.join(x.group(0) for x in regex_no_import.finditer(lines))
 
 
     def generate(self, outputpath, silent=False):
         dest_dir = os.path.dirname(outputpath)
-        if not os.path.isfile(dest_dir):
+        if not os.path.isdir(dest_dir):
             raise ValueError('Output directory "{}" does not exist.'.format(dest_dir))
 
         stl_imports, stl_imports_from = self._read_imports(silent=silent)
@@ -120,16 +133,18 @@ class ModuleGenerator(object):
 
 ################################################################################
 # Generated by the meta modulegenerator
+# Processed {} files/modules:
+{}
 ################################################################################
 
-'''
+'''.format(len(self._files), '\n'.join('#    {}'.format(x) for x in self._files))
             f.write(header)
             importstring = '\n'+'\n'.join('import {}'.format(name) for name in stl_imports)
             importstring += '\n'
-            importstring += '\n'.join('from {} import {} as {}'.format(*names) if len(names) == 3 else 'from {} import {}'.format(*names) for names in stl_imports_from)
+            importstring += '\n'.join('from {} import {} as {}'.format(*names) if len(names) == 3 and names[2] != None else 'from {} import {}'.format(*names) for names in stl_imports_from)
             f.write(importstring)
             for x in self._files:
-                content = self._read_non_imports(x):
+                content = self._read_non_imports(x)
                 f.write('''
 ################################################################################
 # Created from file {}

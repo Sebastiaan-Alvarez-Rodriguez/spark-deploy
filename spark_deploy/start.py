@@ -1,11 +1,11 @@
 import concurrent.futures
-import types
 
+from internal.remoto.modulegenerator import ModuleGenerator
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
-import internal.remoto.modules.spark_start as _spark_start
+import internal.util.fs as fs
 import internal.util.location as loc
+import internal.util.importer as importer
 from internal.util.printer import *
-
 
 def _default_workdir():
     return './spark_workdir'
@@ -20,14 +20,28 @@ def _default_webuiport():
     return 8080
 
 
-def _start_spark_master(remote_connection, installdir, host, port=7077, webui_port=2205, silent=False, retries=5):
-    remote_module = remote_connection.import_module(_spark_start)
+def _start_spark_master(remote_connection, module, installdir, host, port=7077, webui_port=2205, silent=False, retries=5):
+    remote_module = remote_connection.import_module(module)
     return remote_module.start_master(loc.sparkdir(installdir), host, port, webui_port, silent, retries)
 
 
-def _start_spark_slave(remote_connection, installdir, workdir, master_picked, master_port=7077, silent=False, retries=5):
-    remote_module = remote_connection.import_module(_spark_start)
+def _start_spark_slave(remote_connection, module, installdir, workdir, master_picked, master_port=7077, silent=False, retries=5):
+    remote_module = remote_connection.import_module(module)
     return remote_module.start_slave(loc.sparkdir(installdir), workdir, master_picked.ip_local, master_port, silent, retries)
+
+
+def _generate_module_start(silent=False):
+    '''Generates Spark-start module from available sources.'''
+    generation_loc = fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'generated', 'start_spark.py')
+    files = [
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'util', 'printer.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'printer.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'env.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'spark_start.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'remoto_base.py'),
+    ]
+    ModuleGenerator().with_module(fs).with_files(*files).generate(generation_loc, silent)
+    return importer.import_full_path(generation_loc)
 
 
 def _get_master_and_slaves(reservation, master_id=None):
@@ -51,14 +65,6 @@ def _merge_kwargs(x, y):
     z = x.copy()
     z.update(y)
     return z
-
-
-def _get_remote_env(connection):
-    from remoto.process import extend_env
-    arguments = dict()
-    arguments = extend_env(connection, arguments)
-    print(arguments)
-    return arguments['env']
 
 
 def start(reservation, installdir, key_path, master_id=None, master_host=lambda x: x.ip_local, master_port=_default_masterport(), webui_port=_default_webuiport(), slave_workdir=_default_workdir(), silent=False, retries=_default_retries()):
@@ -105,18 +111,15 @@ def start(reservation, installdir, key_path, master_id=None, master_host=lambda 
         futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes}
         connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
 
+        module = _generate_module_start()
 
-        future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, installdir, master_host, port=master_port, webui_port=webui_port, silent=silent, retries=5)
-        
-        future_env_test = executor.submit(_get_remote_env, connectionwrappers[master_picked].connection)
-        
+        future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, module, installdir, master_host, port=master_port, webui_port=webui_port, silent=silent, retries=5)
+
         if not future_spark_master.result():
             printe('Could not start Spark master on node: {}'.format(master_picked))
             return False
-        if not future_env_test.result():
-            printe('Test failure')
-            return False
-        futures_spark_slaves = {node: executor.submit(_start_spark_slave, conn_wrapper.connection, installdir, slave_workdir, master_picked, master_port=master_port, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
+
+        futures_spark_slaves = {node: executor.submit(_start_spark_slave, conn_wrapper.connection, module, installdir, slave_workdir, master_picked, master_port=master_port, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
         for node, slave_future in futures_spark_slaves.items():
             if not slave_future.result():
