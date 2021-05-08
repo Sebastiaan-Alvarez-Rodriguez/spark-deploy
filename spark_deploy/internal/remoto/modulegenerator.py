@@ -1,22 +1,11 @@
 import distutils.sysconfig as sysconfig
 import itertools
-import internal.util.fs as fs
-import os
 import re
 import sys
 import types
 
+import internal.util.fs as fs
 from internal.util.printer import *
-'''
-Idea 0: Use lint on a file for imports. Once we need to generate a module, containing input modules x, y, z, we read x, y, z for the lints, and add the content recursively to the file.
-Idea 1: Just manually specify the modules to write.
-Potential problems:
- 1. Naming conflicts -> We don't care about those. The modules we want to add have no naming problems.
- 2. Secondary imports (we want to write module A, but A requires B) -> We don't care about those. 
-    It is up to the user to also add module B. We need to remove the "import B" statement, however.
-    But, then again, do we have any secondary imports?
-'''
-
 
 
 def _generate_stl_libs():
@@ -27,14 +16,19 @@ def _generate_stl_libs():
     std_lib = sysconfig.get_python_lib(standard_lib=True)
     std_lib_len = len(std_lib)
 
+    found = set()
+    sep = fs.sep()
+
     to_visit = list()
     to_visit.append(std_lib)
-    found = set()
     while any(to_visit):
         visit_now = to_visit.pop()
         to_visit += list(fs.ls(visit_now, only_dirs=True, full_paths=True))
-        found.update(set('.'.join(y[std_lib_len+1:].split(os.path.sep))[:-3] for y in fs.ls(visit_now, only_files=True, full_paths=True) if y[-3:] == '.py' and y[-11:-3] != '__init__'))
 
+        files = list(fs.ls(visit_now, only_files=True, full_paths=True))
+        found.update(set('.'.join(y[std_lib_len+1:].split(sep))[:-3] for y in files if y[-3:] == '.py' and y[-11:-3] != '__init__'))
+        if any(True for x in files if x[-11:] == '__init__.py') and visit_now != std_lib: #If we found '/path/to/python_lib/oof/a/__init__.py', then assume library 'oof.a' exists.
+            found.add('.'.join(visit_now[std_lib_len+1:].split(sep)))
     found.update(set(sys.builtin_module_names))
     return found
 
@@ -64,7 +58,7 @@ class ModuleGenerator(object):
         return self
 
     def with_file(self, filepath):
-        if not os.path.isfile(filepath):
+        if not fs.isfile(filepath):
             raise ValueError('Path "{}" does not refer to a file.'.format(filepath))
         self._files.append(str(filepath))
         return self
@@ -80,18 +74,21 @@ class ModuleGenerator(object):
         return name in self._stl_modules_cache
 
 
-    def _read_imports(self, silent=False):
-        '''Reads imports from all files. Non-stl python libraries are skipped.
+    def _read_imports(self, allowed_imports=None, silent=False):
+        '''Reads imports from all files. Non-stl python libraries are skipped, except those specifically allowed in `allowed_imports`.
         Args:
+            allowed_imports (optional iterable(str)): If set to an iterable, does not remove given import statements.
             silent (optional bool): If set, prints warnings about found non-stl python libraries.
 
         Returns:
             `(set, set)`: The first set contains all found stl import names using format 'import x', with elements `x`.
                           The second set contains all found stl import names using format 'from x import y (as z)', with elements `(x, y)` and `(x, y, z)`.'''
         regex_import = re.compile(r'^ *import +([a-zA-Z\._0-9]+)', re.MULTILINE)
-        regex_from_import = re.compile(r'^ *from +([a-zA-Z\._0-9]+) import +([a-zA-Z\._0-9]+) *(?:as)? *([a-zA-Z\._0-9]+)?', re.MULTILINE)
+        regex_from_import = re.compile(r'^ *from +([a-zA-Z\._0-9]+) import +((?:[a-zA-Z\._0-9]+, *)*[a-zA-Z\._0-9]+) *(?:as)? *([a-zA-Z\._0-9]+)?', re.MULTILINE)
         found_stl_imports = set()
         found_stl_import_froms = set()
+
+        allowed_set = set(allowed_imports) if allowed_imports else None
 
         for x in self._files:
             with open(x, 'r') as f:
@@ -101,7 +98,7 @@ class ModuleGenerator(object):
                     matchtuple = match.groups()
                     match_importmodule = matchtuple[0]
 
-                    if not self._is_regular_python(match_importmodule):
+                    if (not self._is_regular_python(match_importmodule)) and not (allowed_set and match_importmodule in allowed_set):
                         if not silent:
                             printw('(file: {}) Found non-regular import "{}".'.format(x, match_importmodule))
                     else:
@@ -116,18 +113,28 @@ class ModuleGenerator(object):
 
     def _read_non_imports(self, filepath):
         '''Reads given `filepath`, strips lines containing Python import statements (careful with comments, don't use multiline statements with ';'), returns as generator.'''
-        regex_no_import = re.compile(r'^((?!(?:from .+)? *import.*).)+$', re.MULTILINE)
+        regex_no_import = re.compile(r'^((?!(?:from .+)? *import +.*).)+$', re.MULTILINE)
+        # ^((?!(?:from .+)? *import +(?:.*) *(?:as .*)?).)+$
+        # 
         with open(filepath, 'r') as f:
             lines = f.read()
             return '\n'.join(x.group(0) for x in regex_no_import.finditer(lines))
 
 
-    def generate(self, outputpath, silent=False):
-        dest_dir = os.path.dirname(outputpath)
-        if not os.path.isdir(dest_dir):
-            raise ValueError('Output directory "{}" does not exist.'.format(dest_dir))
+    def generate(self, outputpath, allowed_imports=None, silent=False):
+        '''Generates the final, non-stl dependency-free module to be used with Remoto remote module execution. 
+        Captures all import commands and ensures they are present only once for the entire module.
+        Warning: Removes all non-stl import statements.
+        Args:
+            outputpath (str): Location to store module, including output filename. Creates every directory  that does not exist.
+            allowed_imports (optional iterable(str)): If set to an iterable, does not remove given import statements.
+            silent (optional bool): If set, skips printing warnings when non-standard imports are encountered.'''
+        dest_dir = fs.dirname(outputpath)
+        if not fs.isdir(dest_dir):
+            fs.mkdir(dest_dir, exist_ok=True)
 
-        stl_imports, stl_imports_from = self._read_imports(silent=silent)
+
+        stl_imports, stl_imports_from = self._read_imports(allowed_imports=allowed_imports, silent=silent)
         with open(outputpath, 'w') as f:
             header = '''
 
