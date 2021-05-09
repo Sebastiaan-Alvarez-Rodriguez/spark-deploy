@@ -11,10 +11,11 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__)))) 
 
 def _get_modules():
     import cli.install as install
-    import cli.uninstall as uninstall
     import cli.start as start
+    import cli.submit as submit
     import cli.stop as stop
-    return [install, uninstall, start, stop]
+    import cli.uninstall as uninstall
+    return [install, start, submit, stop, uninstall]
 
 
 def generic_args(parser):
@@ -36,7 +37,7 @@ def deploy(mainparser, parsers, args):
         if module.deploy_args_set(args):
             return module.deploy(parsers_for_module, args)
     mainparser.print_help()
-    return True
+    return False
 
 
 def main():
@@ -46,10 +47,10 @@ def main():
         description='Deploy Spark on clusters'
     )
     retval = True
-    geniparsers = subparser(parser)
+    parsers = subparser(parser)
 
     args = parser.parse_args()
-    retval = deploy(parser, geniparsers, args)
+    retval = deploy(parser, parsers, args)
 
     if isinstance(retval, bool):
         exit(0 if retval else 1)
