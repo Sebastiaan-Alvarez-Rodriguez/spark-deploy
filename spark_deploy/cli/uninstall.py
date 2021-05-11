@@ -1,5 +1,5 @@
-import cli.util as _cli_util
-import uninstall as _uninstall
+import spark_deploy.cli.util as _cli_util
+import spark_deploy.uninstall as _uninstall
 
 
 '''CLI module to uninstall Spark and Java from a cluster.'''
@@ -21,4 +21,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _uninstall.uninstall(reservation, args.install_dir, args.key_path) if reservation else False
+    return _uninstall(reservation, args.install_dir, args.key_path) if reservation else False

@@ -1,20 +1,15 @@
 import concurrent.futures
 
-import internal.defaults as defaults
-from internal.remoto.modulegenerator import ModuleGenerator
-from internal.remoto.util import get_ssh_connection as _get_ssh_connection
-import internal.util.fs as fs
-import internal.util.location as loc
-import internal.util.importer as importer
-from internal.util.printer import *
 
-
-def _default_workdir():
-    return './spark_workdir'
-
-
-def _default_retries():
-    return 5
+import spark_deploy.internal.defaults.install as install_defaults
+import spark_deploy.internal.defaults.start as start_defaults
+import spark_deploy.internal.defaults.stop as defaults
+from spark_deploy.internal.remoto.modulegenerator import ModuleGenerator
+from spark_deploy.internal.remoto.util import get_ssh_connection as _get_ssh_connection
+import spark_deploy.internal.util.fs as fs
+import spark_deploy.internal.util.location as loc
+import spark_deploy.internal.util.importer as importer
+from spark_deploy.internal.util.printer import *
 
 
 def _stop_spark(remote_connection, module, install_dir, workdir=None, silent=False, retries=5):
@@ -41,7 +36,7 @@ def _merge_kwargs(x, y):
     return z
 
 
-def stop(reservation, install_dir=defaults.install_dir(), key_path=None, slave_workdir=_default_workdir(), silent=False, retries=5):
+def stop(reservation, install_dir=install_defaults.install_dir(), key_path=None, slave_workdir=start_defaults.workdir(), silent=False, retries=defaults.retries()):
     '''Stop Spark on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start Spark on.

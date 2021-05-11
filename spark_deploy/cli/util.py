@@ -1,5 +1,5 @@
 from metareserve import Reservation as _Reservation
-from internal.util.printer import *
+from spark_deploy.internal.util.printer import *
 
 def read_reservation_cli():
     '''Read `MetaReserve.` from user input.'''

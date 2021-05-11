@@ -8,8 +8,8 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))) # Appends main project root as importpath.
 
-
-import spark_deploy.internal.defaults as defaults
+import spark_deploy
+import spark_deploy.internal.defaults.install as defaults
 
 
 def _get_modules():

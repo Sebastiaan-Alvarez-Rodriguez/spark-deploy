@@ -1,31 +1,12 @@
 import concurrent.futures
 
-import spark_deploy.internal.defaults as defaults
+import spark_deploy.internal.defaults.install as defaults
 from spark_deploy.internal.remoto.modulegenerator import ModuleGenerator
 from spark_deploy.internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import spark_deploy.internal.util.fs as fs
 import spark_deploy.internal.util.location as loc
 import spark_deploy.internal.util.importer as importer
 from spark_deploy.internal.util.printer import *
-
-def _default_spark_url():
-    return 'https://downloads.apache.org/spark/spark-3.1.1/spark-3.1.1-bin-hadoop2.7.tgz'
-
-def _default_java_url():
-    return 'https://download.java.net/java/GA/jdk11/9/GPL/openjdk-11.0.2_linux-x64_bin.tar.gz'
-
-def _default_java_min():
-    return 11
-
-def _default_java_max():
-    return 0
-
-def _default_retries():
-    return 5
-
-def _default_use_sudo():
-    return False
-
 
 def _install_spark(connection, spark_module, install_dir, spark_url, silent=False, retries=5):
     remote_module = connection.import_module(spark_module)
@@ -53,7 +34,7 @@ def _generate_module_spark(silent=False):
     return importer.import_full_path(generation_loc)
 
 
-def generate_module_java(silent=False):    
+def _generate_module_java(silent=False):    
     generation_loc = fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'generated', 'install_java.py')
     files = [
         fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'util', 'printer.py'),
@@ -72,7 +53,7 @@ def _merge_kwargs(x, y):
     return z
 
 
-def install(reservation, install_dir=defaults.install_dir(), key_path=None, spark_url=_default_spark_url(), java_url=_default_java_url(), java_min=_default_java_min(), java_max=_default_java_max(), use_sudo=_default_use_sudo(), silent=False, retries=_default_retries()):
+def install(reservation, install_dir=defaults.install_dir(), key_path=None, spark_url=defaults.spark_url(), java_url=defaults.java_url(), java_min=defaults.java_min(), java_max=defaults.java_max(), use_sudo=defaults.use_sudo(), silent=False, retries=defaults.retries()):
     '''Install Spark and Java on a reserved cluster. Does not reinstall if already present.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to install Spark on.
@@ -109,7 +90,7 @@ def install(reservation, install_dir=defaults.install_dir(), key_path=None, spar
             return False
 
         spark_module = _generate_module_spark()
-        java_module = generate_module_java()
+        java_module = _generate_module_java()
 
         futures_install_spark = {executor.submit(_install_spark, x.connection, spark_module, install_dir, spark_url, silent=silent, retries=retries): x for x in connectionwrappers}
         futures_install_java = {executor.submit(_install_java, x.connection, java_module, install_dir, java_url, java_min, java_max, use_sudo, silent=silent, retries=retries): x for x in connectionwrappers}

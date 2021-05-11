@@ -2,9 +2,10 @@ import concurrent.futures
 
 import remoto.process
 
-from internal.remoto.util import get_ssh_connection as _get_ssh_connection
-import internal.util.location as loc
-from internal.util.printer import *
+import spark_deploy.internal.defaults.install as install_defaults
+from spark_deploy.internal.remoto.util import get_ssh_connection as _get_ssh_connection
+import spark_deploy.internal.util.location as loc
+from spark_deploy.internal.util.printer import *
 
 
 def _uninstall_spark(connection, install_dir):
@@ -21,12 +22,12 @@ def _merge_kwargs(x, y):
     return z
 
 
-def uninstall(reservation, install_dir, key_path):
+def uninstall(reservation, install_dir=install_defaults.install_dir(), key_path=None):
     '''Uninstall Spark and Java from a reserved cluster.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to remove Spark, Java from.
         install_dir (str): Location on remote host where Spark and dependencies are installed.
-        key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
+        key_path (optional str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
 
     Raises:
         Valuerror: When reservation contains 0 nodes or is `None`.

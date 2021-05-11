@@ -1,24 +1,13 @@
 import concurrent.futures
 
-import internal.defaults as defaults
-from internal.remoto.modulegenerator import ModuleGenerator
-from internal.remoto.util import get_ssh_connection as _get_ssh_connection
-import internal.util.fs as fs
-import internal.util.location as loc
-import internal.util.importer as importer
-from internal.util.printer import *
-
-def _default_workdir():
-    return './spark_workdir'
-
-def _default_retries():
-    return 5
-
-def _default_masterport():
-    return 7077
-
-def _default_webuiport():
-    return 8080
+import spark_deploy.internal.defaults.install as install_defaults
+import spark_deploy.internal.defaults.start as defaults
+from spark_deploy.internal.remoto.modulegenerator import ModuleGenerator
+from spark_deploy.internal.remoto.util import get_ssh_connection as _get_ssh_connection
+import spark_deploy.internal.util.fs as fs
+import spark_deploy.internal.util.location as loc
+import spark_deploy.internal.util.importer as importer
+from spark_deploy.internal.util.printer import *
 
 
 def _start_spark_master(remote_connection, module, install_dir, host, port=7077, webui_port=2205, silent=False, retries=5):
@@ -68,7 +57,7 @@ def _merge_kwargs(x, y):
     return z
 
 
-def start(reservation, install_dir=defaults.install_dir(), key_path=None, master_id=None, master_host=lambda x: x.ip_local, master_port=_default_masterport(), webui_port=_default_webuiport(), slave_workdir=_default_workdir(), silent=False, retries=_default_retries()):
+def start(reservation, install_dir=install_defaults.install_dir(), key_path=None, master_id=None, master_host=lambda x: x.ip_local, master_port=defaults.masterport(), webui_port=defaults.webuiport(), slave_workdir=defaults.workdir(), silent=False, retries=defaults.retries()):
     '''Boot Spark on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start Spark on.

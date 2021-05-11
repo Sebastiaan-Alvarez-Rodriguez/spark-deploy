@@ -1,9 +1,9 @@
 import logging
 import remoto
 import tempfile
-from internal.remoto.ssh_wrapper import RemotoSSHWrapper as _RemotoSSHWrapper
-import thirdparty.sshconf as sshconf
-from internal.util.printer import *
+from spark_deploy.internal.remoto.ssh_wrapper import RemotoSSHWrapper as _RemotoSSHWrapper
+import spark_deploy.thirdparty.sshconf as sshconf
+from spark_deploy.internal.util.printer import *
 
 def _get_logger(loggername, loglevel):
     logging.basicConfig()

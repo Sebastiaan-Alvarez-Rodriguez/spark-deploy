@@ -5,11 +5,12 @@ import subprocess
 
 import remoto.process
 
-import internal.defaults as defaults
-from internal.remoto.util import get_ssh_connection as _get_ssh_connection
-import internal.util.fs as fs
-import internal.util.location as loc
-from internal.util.printer import *
+import spark_deploy.internal.defaults.install as install_defaults
+import spark_deploy.internal.defaults.submit as defaults
+from spark_deploy.internal.remoto.util import get_ssh_connection as _get_ssh_connection
+import spark_deploy.internal.util.fs as fs
+import spark_deploy.internal.util.location as loc
+from spark_deploy.internal.util.printer import *
 
 
 
@@ -88,7 +89,7 @@ def clean(reservation, key_path, paths, admin_id=None, silent=False):
 
 
 
-def submit(reservation, command, paths=[], install_dir=defaults.install_dir(), key_path=None, application_dir=defaults.application_dir(), master_id=None, silent=False):
+def submit(reservation, command, paths=[], install_dir=install_defaults.install_dir(), key_path=None, application_dir=defaults.application_dir(), master_id=None, silent=False):
     '''Deploy data on the RADOS-Ceph cluster, on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start RADOS-Ceph on.

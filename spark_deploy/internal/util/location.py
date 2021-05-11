@@ -1,4 +1,4 @@
-import internal.util.fs as fs
+import spark_deploy.internal.util.fs as fs
 
 
 def sparkdir(install_dir):

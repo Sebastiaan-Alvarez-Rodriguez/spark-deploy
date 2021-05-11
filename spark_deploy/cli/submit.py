@@ -1,7 +1,6 @@
-import cli.util as _cli_util
-import submit as _submit
-
-import internal.defaults as defaults
+import spark_deploy.cli.util as _cli_util
+import spark_deploy.submit as _submit
+import spark_deploy.internal.defaults.submit as defaults
 
 
 '''CLI module to start a Spark cluster.'''
@@ -29,4 +28,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _submit.submit(reservation, args.cmd, args.paths, args.install_dir, args.key_path, args.application_dir, args.master_id, silent=args.silent) if reservation else False
+    return _submit(reservation, args.cmd, args.paths, args.install_dir, args.key_path, args.application_dir, args.master_id, silent=args.silent) if reservation else False
