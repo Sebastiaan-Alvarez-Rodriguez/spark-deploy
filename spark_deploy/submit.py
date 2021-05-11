@@ -5,6 +5,7 @@ import subprocess
 
 import remoto.process
 
+import internal.defaults as defaults
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import internal.util.fs as fs
 import internal.util.location as loc
@@ -35,12 +36,11 @@ def _merge_kwargs(x, y):
     return z
 
 
-def clean(reservation, key_path, applicationdir, admin_id=None, silent=False):
+def clean(reservation, key_path, paths, admin_id=None, silent=False):
     '''Cleans data from the RADOS-Ceph cluster, on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start RADOS-Ceph on.
         key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
-        applicationdir (str): Location on remote host where we export all given 'paths' to.
         paths (list(str)): Data paths to delete to the remote cluster. Mountpoint path is always prepended.
         admin_id (optional int): Node id of the ceph admin. If `None`, the node with lowest public ip value (string comparison) will be picked.
         mountpoint_path (optional str): Path where CephFS is mounted on all nodes.
@@ -59,8 +59,6 @@ def clean(reservation, key_path, applicationdir, admin_id=None, silent=False):
         ssh_kwargs['IdentityFile'] = key_path
 
     connection = _get_ssh_connection(admin_picked.ip_public, silent=silent, ssh_params=ssh_kwargs)
-
-    remoto.process.check(connection.connection, 'mkdir {}'.format(applicationdir), shell=True)
 
     if any(paths):
         with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count()-1) as executor:
@@ -90,15 +88,15 @@ def clean(reservation, key_path, applicationdir, admin_id=None, silent=False):
 
 
 
-def submit(reservation, installdir, applicationdir, key_path, command, paths, master_id=None, silent=False):
+def submit(reservation, command, paths=[], install_dir=defaults.install_dir(), key_path=None, application_dir=defaults.application_dir(), master_id=None, silent=False):
     '''Deploy data on the RADOS-Ceph cluster, on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start RADOS-Ceph on.
-        installdir (str): Location on remote host where Spark (and any local-installed Java) is installed in.
-        applicationdir (str): Location on remote host where we export all given 'paths' to.
-        key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
         command (str): Command to propagate to remote "spark-submit" executable.
-        paths (list(str)): Data paths to offload to the remote cluster. Can be relative to CWD or absolute.
+        paths (optional list(str)): Data paths to offload to the remote cluster. Can be relative to CWD or absolute.
+        install_dir (str): Location on remote host where Spark (and any local-installed Java) is installed in.
+        key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
+        application_dir (optional str): Location on remote host where we export all given 'paths' to.
         master_id (optional int): Node id of the Spark master. If `None`, the node with lowest public ip value (string comparison) will be picked.
         silent (optional bool): If set, we only print errors and critical info. Otherwise, more verbose output.
 
@@ -116,17 +114,17 @@ def submit(reservation, installdir, applicationdir, key_path, command, paths, ma
 
     connection = _get_ssh_connection(master_picked.ip_public, silent=silent, ssh_params=ssh_kwargs)
 
-    _, _, exitcode = remoto.process.check(connection.connection, 'ls {}'.format(fs.join(loc.sparkdir(installdir), 'bin', 'spark-submit')), shell=True)
+    _, _, exitcode = remoto.process.check(connection.connection, 'ls {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit')), shell=True)
     if exitcode != 0:
-        raise FileNotFoundError('Could not find spark-submit executable on remote. Expected at: {}'.format(fs.join(loc.sparkdir(installdir), 'bin', 'spark-submit')))
+        raise FileNotFoundError('Could not find spark-submit executable on remote. Expected at: {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit')))
 
-    remoto.process.check(connection.connection, 'mkdir -p {}'.format(applicationdir), shell=True)
+    remoto.process.check(connection.connection, 'mkdir -p {}'.format(application_dir), shell=True)
     if any(paths):
         paths = [fs.abspath(x) for x in paths]
         if not silent:
             print('Transferring application data...')
         with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count()-1) as executor:
-            fun = lambda path: subprocess.call('rsync -e "ssh -F {}" -az {} {}:{}'.format(connection.ssh_config.name, path, master_picked.ip_public, fs.join(applicationdir, fs.basename(path))), , shell=True) == 0
+            fun = lambda path: subprocess.call('rsync -e "ssh -F {}" -az {} {}:{}'.format(connection.ssh_config.name, path, master_picked.ip_public, fs.join(application_dir, fs.basename(path))), shell=True) == 0
             rsync_futures = [executor.submit(fun, path) for path in paths]
 
             if not all(x.result() for x in rsync_futures):
@@ -135,9 +133,9 @@ def submit(reservation, installdir, applicationdir, key_path, command, paths, ma
         if not silent:
             prints('Application data deployed.')
 
-    run_cmd = '{} {}'.format(fs.join(loc.sparkdir(installdir), 'bin', 'spark-submit'), command)
+    run_cmd = '{} {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit'), command) # TODO: Default relative path "./deps" does not work here below, when changing the cwd away from $HOME!!!
     print('Executing:\n{}'.format(run_cmd))
-    out, err, exitcode = remoto.process.check(connection.connection, run_cmd, shell=True, cwd=applicationdir)
+    out, err, exitcode = remoto.process.check(connection.connection, run_cmd, shell=True, cwd=application_dir)
 
     if exitcode == 0:
         prints('Application submission succeeded.')

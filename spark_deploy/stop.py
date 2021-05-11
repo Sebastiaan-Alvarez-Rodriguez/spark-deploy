@@ -1,5 +1,6 @@
 import concurrent.futures
 
+import internal.defaults as defaults
 from internal.remoto.modulegenerator import ModuleGenerator
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import internal.util.fs as fs
@@ -16,9 +17,9 @@ def _default_retries():
     return 5
 
 
-def _stop_spark(remote_connection, module, installdir, workdir=None, silent=False, retries=5):
+def _stop_spark(remote_connection, module, install_dir, workdir=None, silent=False, retries=5):
     remote_module = remote_connection.import_module(module)
-    return remote_module.stop_all(loc.sparkdir(installdir), workdir, silent, retries)
+    return remote_module.stop_all(loc.sparkdir(install_dir), workdir, silent, retries)
 
 
 def _generate_module_stop(silent=False):
@@ -40,12 +41,12 @@ def _merge_kwargs(x, y):
     return z
 
 
-def stop(reservation, installdir, key_path, slave_workdir=_default_workdir(), silent=False, retries=5):
+def stop(reservation, install_dir=defaults.install_dir(), key_path=None, slave_workdir=_default_workdir(), silent=False, retries=5):
     '''Stop Spark on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start Spark on.
-        installdir (str): Location on remote host where Spark (and any local-installed Java) is installed in.
-        key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
+        install_dir (optional str): Location on remote host where Spark (and any local-installed Java) is installed in.
+        key_path (optional str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
         slave_workdir (optional str): Path to Spark workdir location for all slave daemons.
         silent (optional bool): If set, we only print errors and critical info (e.g. spark master url). Otherwise, more verbose output.
         retries (optional int): Number of tries we try to connect to the master.
@@ -65,7 +66,7 @@ def stop(reservation, installdir, key_path, slave_workdir=_default_workdir(), si
 
         stop_module = _generate_module_stop()
 
-        futures_spark_stop = {node: executor.submit(_stop_spark, conn_wrapper.connection, stop_module, installdir, workdir=slave_workdir, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
+        futures_spark_stop = {node: executor.submit(_stop_spark, conn_wrapper.connection, stop_module, install_dir, workdir=slave_workdir, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
         for node, slave_future in futures_spark_stop.items():
             if not slave_future.result():

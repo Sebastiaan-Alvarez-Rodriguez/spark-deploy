@@ -7,12 +7,12 @@ import internal.util.location as loc
 from internal.util.printer import *
 
 
-def _uninstall_spark(connection, installdir):
-    remoto.process.run(connection, ['rm', '-rf', loc.sparkdir(installdir)])
+def _uninstall_spark(connection, install_dir):
+    remoto.process.run(connection, ['rm', '-rf', loc.sparkdir(install_dir)])
 
 
-def _uninstall_java(connection, installdir):
-    remoto.process.run(connection, ['rm', '-rf', loc.java_nonroot_dir(installdir)])
+def _uninstall_java(connection, install_dir):
+    remoto.process.run(connection, ['rm', '-rf', loc.java_nonroot_dir(install_dir)])
 
 
 def _merge_kwargs(x, y):
@@ -21,11 +21,11 @@ def _merge_kwargs(x, y):
     return z
 
 
-def uninstall(reservation, installdir, key_path):
+def uninstall(reservation, install_dir, key_path):
     '''Uninstall Spark and Java from a reserved cluster.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to remove Spark, Java from.
-        installdir (str): Location on remote host where Spark and dependencies are installed.
+        install_dir (str): Location on remote host where Spark and dependencies are installed.
         key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
 
     Raises:
@@ -49,8 +49,8 @@ def uninstall(reservation, installdir, key_path):
             printe('Could not connect to some nodes.')
             return False
 
-        futures_uninstall = [executor.submit(_uninstall_spark, x.connection, installdir) for x in connectionwrappers]
-        futures_uninstall+= [executor.submit(_uninstall_java, x.connection, installdir) for x in connectionwrappers]
+        futures_uninstall = [executor.submit(_uninstall_spark, x.connection, install_dir) for x in connectionwrappers]
+        futures_uninstall+= [executor.submit(_uninstall_java, x.connection, install_dir) for x in connectionwrappers]
 
         results = [x.result() for x in futures_uninstall]
         prints('Clean successful.')

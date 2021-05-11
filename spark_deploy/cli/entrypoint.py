@@ -6,21 +6,24 @@ import sys
 
 '''Python CLI module to deploy Spark on metareserve-allocated resources.'''
 
-sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__)))) # Appends main project root as importpath.
+sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))) # Appends main project root as importpath.
+
+
+import spark_deploy.internal.defaults as defaults
 
 
 def _get_modules():
-    import cli.install as install
-    import cli.start as start
-    import cli.submit as submit
-    import cli.stop as stop
-    import cli.uninstall as uninstall
+    import spark_deploy.cli.install as install
+    import spark_deploy.cli.start as start
+    import spark_deploy.cli.submit as submit
+    import spark_deploy.cli.stop as stop
+    import spark_deploy.cli.uninstall as uninstall
     return [install, start, submit, stop, uninstall]
 
 
 def generic_args(parser):
     '''Configure arguments important for all modules (install, uninstall, start, stop) here.'''
-    parser.add_argument('--installdir', type=str, default='./deps/', help='Installation directory for Spark and java, for all remote machines. Note: The home directory of the remote machines is prepended to this path if it is relative.')
+    parser.add_argument('--install_dir', type=str, default=defaults.install_dir(), help='Installation directory for Spark and java, for all remote machines. Note: The home directory of the remote machines is prepended to this path if it is relative.')
     parser.add_argument('--key-path', dest='key_path', type=str, default=None, help='Path to ssh key to access nodes.')
 
 

@@ -1,5 +1,6 @@
 import concurrent.futures
 
+import internal.defaults as defaults
 from internal.remoto.modulegenerator import ModuleGenerator
 from internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import internal.util.fs as fs
@@ -20,14 +21,14 @@ def _default_webuiport():
     return 8080
 
 
-def _start_spark_master(remote_connection, module, installdir, host, port=7077, webui_port=2205, silent=False, retries=5):
+def _start_spark_master(remote_connection, module, install_dir, host, port=7077, webui_port=2205, silent=False, retries=5):
     remote_module = remote_connection.import_module(module)
-    return remote_module.start_master(loc.sparkdir(installdir), host, port, webui_port, silent, retries)
+    return remote_module.start_master(loc.sparkdir(install_dir), host, port, webui_port, silent, retries)
 
 
-def _start_spark_slave(remote_connection, module, installdir, workdir, master_picked, master_port=7077, silent=False, retries=5):
+def _start_spark_slave(remote_connection, module, install_dir, workdir, master_picked, master_port=7077, silent=False, retries=5):
     remote_module = remote_connection.import_module(module)
-    return remote_module.start_slave(loc.sparkdir(installdir), workdir, master_picked.ip_local, master_port, silent, retries)
+    return remote_module.start_slave(loc.sparkdir(install_dir), workdir, master_picked.ip_local, master_port, silent, retries)
 
 
 def _generate_module_start(silent=False):
@@ -67,12 +68,12 @@ def _merge_kwargs(x, y):
     return z
 
 
-def start(reservation, installdir, key_path, master_id=None, master_host=lambda x: x.ip_local, master_port=_default_masterport(), webui_port=_default_webuiport(), slave_workdir=_default_workdir(), silent=False, retries=_default_retries()):
+def start(reservation, install_dir=defaults.install_dir(), key_path=None, master_id=None, master_host=lambda x: x.ip_local, master_port=_default_masterport(), webui_port=_default_webuiport(), slave_workdir=_default_workdir(), silent=False, retries=_default_retries()):
     '''Boot Spark on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start Spark on.
-        installdir (str): Location on remote host where Spark (and any local-installed Java) is installed in.
-        key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
+        install_dir (optional str): Location on remote host where Spark (and any local-installed Java) is installed in.
+        key_path (optional str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
         master_id (optional int): Node id that must become the master. If `None`, the node with lowest public ip value (string comparison) will be picked.
         master_host (str or function or lambda): IP/Hostname to listen to. 
             Warning: If a globally accessible ip/hostname is set (e.g. 0.0.0.0), then Spark is reachable from the public internet.
@@ -113,13 +114,13 @@ def start(reservation, installdir, key_path, master_id=None, master_host=lambda 
 
         module = _generate_module_start()
 
-        future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, module, installdir, master_host, port=master_port, webui_port=webui_port, silent=silent, retries=5)
+        future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, module, install_dir, master_host, port=master_port, webui_port=webui_port, silent=silent, retries=5)
 
         if not future_spark_master.result():
             printe('Could not start Spark master on node: {}'.format(master_picked))
             return False
 
-        futures_spark_slaves = {node: executor.submit(_start_spark_slave, conn_wrapper.connection, module, installdir, slave_workdir, master_picked, master_port=master_port, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
+        futures_spark_slaves = {node: executor.submit(_start_spark_slave, conn_wrapper.connection, module, install_dir, slave_workdir, master_picked, master_port=master_port, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
         for node, slave_future in futures_spark_slaves.items():
             if not slave_future.result():
