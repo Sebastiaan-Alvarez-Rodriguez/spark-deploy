@@ -1,6 +1,5 @@
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import urllib.request
@@ -207,7 +206,7 @@ def java_install(location=None, url=None, minversion=11, maxversion=0, use_sudo=
             try:
                 extractloc = join(tmpdir, 'extracted')
                 mkdir(extractloc, exist_ok=True)
-                shutil.unpack_archive(archiveloc, extractloc)
+                unpack(archiveloc, extractloc)
 
                 extracted_dir = next(ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
             except Exception as e:

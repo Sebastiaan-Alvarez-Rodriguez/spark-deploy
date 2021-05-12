@@ -1,5 +1,4 @@
 import os
-import shutil
 import tempfile
 import urllib.request
 
@@ -9,7 +8,7 @@ import urllib.request
 
 def _is_installed(location):
     '''Check if Spark is installed in given directory.'''
-    return os.path.isdir(location) and os.path.isdir(os.path.join(location, 'sbin'))
+    return isdir(location) and isdir(join(location, 'sbin'))
 
 
 def spark_install(location, url, silent=False, retries=5):
@@ -33,12 +32,12 @@ def spark_install(location, url, silent=False, retries=5):
             print('Existing Spark installation detected. Skipping installation.')
         return True
 
-    os.makedirs(location, exist_ok=True)
+    mkdir(location, exist_ok=True)
     if not silent:
         print('Installing Spark in {}...'.format(location))
 
     with tempfile.TemporaryDirectory() as tmpdir: # We use a tempfile to store the downloaded zip.
-        archiveloc = os.path.join(tmpdir, 'spark.tgz')
+        archiveloc = join(tmpdir, 'spark.tgz')
         for x in range(retries):
             try:
                 rm(archiveloc, ignore_errors=True)
@@ -53,9 +52,9 @@ def spark_install(location, url, silent=False, retries=5):
                     printe('Could not download Spark: ', e)
                     return False
         try:
-            extractloc = os.path.join(tmpdir, 'extracted')
-            os.makedirs(extractloc, exist_ok=True)
-            shutil.unpack_archive(archiveloc, extractloc)
+            extractloc = join(tmpdir, 'extracted')
+            mkdir(extractloc, exist_ok=True)
+            unpack(archiveloc, extractloc)
 
             extracted_dir = next(ls(extractloc, only_dirs=True, full_paths=True)) # find out what the extracted directory is called. There will be only 1 extracted directory.
             for x in ls(extracted_dir, full_paths=True): # Move every file and directory to the final location.
