@@ -12,7 +12,7 @@ def subparser(subparsers):
     submitparser.add_argument('--master', metavar='id', dest='master_id', type=int, default=None, help='ID of the node that will be the master node (command will be executed on this node).')
     submitparser.add_argument('--silent', help='If set, less boot output is shown.', action='store_true')
     submitparser.add_argument('--paths', metavar='path', type=str, nargs='+', default=[], help='Paths to files/directories to export to the cluster. These files/directories will be in the CWD when executing "spark-submit".')
-    submitparser.add_argument('--application_dir', type=str, default=defaults.application_dir(), help='Location on remote host where we export all given applications to (pointed to by "paths"). The home directory of the remote machines is prepended to this path if it is relative.')
+    submitparser.add_argument('--application_dir', type=str, default=defaults.application_dir(), help='Location on remote host where we export all given applications to (pointed to by "paths").')
     
     return [submitparser]
 

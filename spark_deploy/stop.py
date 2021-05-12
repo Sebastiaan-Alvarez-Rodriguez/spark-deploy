@@ -36,13 +36,13 @@ def _merge_kwargs(x, y):
     return z
 
 
-def stop(reservation, install_dir=install_defaults.install_dir(), key_path=None, slave_workdir=start_defaults.workdir(), silent=False, retries=defaults.retries()):
+def stop(reservation, install_dir=install_defaults.install_dir(), key_path=None, worker_workdir=start_defaults.workdir(), silent=False, retries=defaults.retries()):
     '''Stop Spark on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start Spark on.
         install_dir (optional str): Location on remote host where Spark (and any local-installed Java) is installed in.
         key_path (optional str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
-        slave_workdir (optional str): Path to Spark workdir location for all slave daemons.
+        worker_workdir (optional str): Path to Spark workdir location for all worker daemons.
         silent (optional bool): If set, we only print errors and critical info (e.g. spark master url). Otherwise, more verbose output.
         retries (optional int): Number of tries we try to connect to the master.
 
@@ -61,11 +61,11 @@ def stop(reservation, install_dir=install_defaults.install_dir(), key_path=None,
 
         stop_module = _generate_module_stop()
 
-        futures_spark_stop = {node: executor.submit(_stop_spark, conn_wrapper.connection, stop_module, install_dir, workdir=slave_workdir, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
+        futures_spark_stop = {node: executor.submit(_stop_spark, conn_wrapper.connection, stop_module, install_dir, workdir=worker_workdir, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items()}
         state_ok = True
-        for node, slave_future in futures_spark_stop.items():
-            if not slave_future.result():
-                printe('Could not stop Spark slave on remote: {}'.format(node))
+        for node, worker_future in futures_spark_stop.items():
+            if not worker_future.result():
+                printe('Could not stop Spark worker on remote: {}'.format(node))
                 state_ok = False
         if state_ok:
             prints('Stopping Spark on all nodes succeeded.')

@@ -5,8 +5,8 @@ import subprocess
 import tempfile
 import urllib.request
 
-'''In this file, we provide functions to install Java.'''
 
+'''In this file, we provide functions to install Java.'''
 
 def java_exec_get_versioninfo(java_exec, *args):
     '''Fetches Java version CLI output.
@@ -158,7 +158,8 @@ def java_install(location=None, url=None, minversion=11, maxversion=0, use_sudo=
 
     Returns:
         `True` on success, `False` on failure.'''
-
+    location = os.path.expanduser(location)
+    
     global env
     env = Environment()
 

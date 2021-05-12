@@ -23,7 +23,7 @@ def _get_modules():
 
 def generic_args(parser):
     '''Configure arguments important for all modules (install, uninstall, start, stop) here.'''
-    parser.add_argument('--install_dir', type=str, default=defaults.install_dir(), help='Installation directory for Spark and java, for all remote machines. Note: The home directory of the remote machines is prepended to this path if it is relative.')
+    parser.add_argument('--install_dir', type=str, default=defaults.install_dir(), help='Installation directory for Spark and java, for all remote machines (default={}).'.format(defaults.install_dir()))
     parser.add_argument('--key-path', dest='key_path', type=str, default=None, help='Path to ssh key to access nodes.')
 
 

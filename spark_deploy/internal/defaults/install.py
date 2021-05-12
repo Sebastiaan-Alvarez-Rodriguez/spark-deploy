@@ -1,7 +1,7 @@
 # installation default values
 
 def install_dir():
-    return './deps'
+    return '~/deps'
 
 def spark_url():
     return 'https://downloads.apache.org/spark/spark-3.1.1/spark-3.1.1-bin-hadoop2.7.tgz'

@@ -27,7 +27,7 @@ def spark_install(location, url, silent=False, retries=5):
         retries (optional int): Number of retries to use when downloading, extracting.
     Returns:
         `True` on success, `False` on failure.'''
-
+    location = os.path.expanduser(location)
     if _is_installed(location): # Already installed
         if not silent:
             print('Existing Spark installation detected. Skipping installation.')

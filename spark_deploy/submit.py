@@ -14,14 +14,14 @@ from spark_deploy.internal.util.printer import *
 
 
 
-def _get_master_and_slaves(reservation, master_id=None):
-    '''Divides nodes in 1 master and a list of slaves.
+def _get_master_and_workers(reservation, master_id=None):
+    '''Divides nodes in 1 master and a list of workers.
     Args:
-        reservation (`metareserve.Reservation`): Nodes to divide into a master + slaves.
+        reservation (`metareserve.Reservation`): Nodes to divide into a master + workers.
         master_id (optional int): If set, node with given ID will be master. If `None`, node with lowest public ip string value will be master.
     
     Returns:
-        1 master, and a list of slaves.'''
+        1 master, and a list of workers.'''
     if len(reservation) == 1:
         return next(reservation.nodes), []
 
@@ -52,7 +52,7 @@ def clean(reservation, key_path, paths, admin_id=None, silent=False):
     if (not reservation) or len(reservation) == 0:
         raise ValueError('Reservation does not contain any items'+(' (reservation=None)' if not reservation else ''))
     
-    master_picked, slaves_picked = _get_master_and_slaves(reservation, master_id)
+    master_picked, workers_picked = _get_master_and_workers(reservation, master_id)
     print('Picked master node: {}'.format(master_picked))
 
     ssh_kwargs = {'IdentitiesOnly': 'yes', 'User': admin_picked.extra_info['user'], 'StrictHostKeyChecking': 'no'}
@@ -106,7 +106,7 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
     if not reservation or len(reservation) == 0:
         raise ValueError('Reservation does not contain any items'+(' (reservation=None)' if not reservation else ''))
 
-    master_picked, slaves_picked = _get_master_and_slaves(reservation, master_id)
+    master_picked, workers_picked = _get_master_and_workers(reservation, master_id)
     print('Picked master node: {}'.format(master_picked))
 
     ssh_kwargs = {'IdentitiesOnly': 'yes', 'User': master_picked.extra_info['user'], 'StrictHostKeyChecking': 'no'}
@@ -134,6 +134,8 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
         if not silent:
             prints('Application data deployed.')
 
+    if not install_dir[0] == '/' and not install_dir[0] == '~': # We deal with a relative path as installdir. This means '~/' must be appended, so we can execute this from non-home cwds.
+        installdir = '~/'+install_dir
     run_cmd = '{} {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit'), command) # TODO: Default relative path "./deps" does not work here below, when changing the cwd away from $HOME!!!
     print('Executing:\n{}'.format(run_cmd))
     out, err, exitcode = remoto.process.check(connection.connection, run_cmd, shell=True, cwd=application_dir)

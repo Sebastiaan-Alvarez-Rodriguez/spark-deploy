@@ -14,7 +14,7 @@ def java_home():
 
 def start_master(sparkloc, host, port=7077, webui_port=8080, silent=False, retries=5, retries_sleep=5):
     '''Boots master on given node.
-    Note: Spark works with Daemons, so expect to return quickly, probably even before the slave is actually ready.
+    Note: Spark works with Daemons, so expect to return quickly, probably even before the worker is actually ready.
 
     Args:
         sparkloc (str): Location in which Spark is installed.
@@ -30,6 +30,7 @@ def start_master(sparkloc, host, port=7077, webui_port=8080, silent=False, retri
 
     Returns:
         `True` on success, `False` otherwise.'''
+    sparkloc = os.path.expanduser(sparkloc)
     env = Environment()
     env.load_to_env()
     if not isdir(sparkloc):
@@ -61,9 +62,9 @@ def start_master(sparkloc, host, port=7077, webui_port=8080, silent=False, retri
     return False
 
 
-def start_slave(sparkloc, workdir, master_node, master_port=7077, silent=False, retries=5, retries_sleep=5):
-    '''Boots a slave.
-    Note: Spark works with Daemons, so expect to return quickly, probably even before the slave is actually ready.
+def start_worker(sparkloc, workdir, master_node, master_port=7077, silent=False, retries=5, retries_sleep=5):
+    '''Boots a worker.
+    Note: Spark works with Daemons, so expect to return quickly, probably even before the worker is actually ready.
 
     Args:
         sparkloc (str): Location in which Spark is installed.
@@ -76,6 +77,8 @@ def start_slave(sparkloc, workdir, master_node, master_port=7077, silent=False, 
 
     Returns:
         `True` on success, `False` otherwise.'''
+    sparkloc = os.path.expanduser(sparkloc)
+    workdir = os.path.expanduser(workdir)
     env = Environment()
     env.load_to_env()
     if not isdir(sparkloc):
@@ -94,16 +97,20 @@ def start_slave(sparkloc, workdir, master_node, master_port=7077, silent=False, 
     master_url = 'spark://{}:{}'.format(master_node, master_port)
 
     if not silent:
-        print('Spawning slave')
+        print('Spawning worker')
 
-    cmd = '{} {} --work-dir {} {} 1>&2'.format(scriptloc, master_url, workdir, '> /dev/null 2>&1' if silent else '')
-    kwargs = {'stderr': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL} if silent else {} 
-    
+    cmd = '{} {} --work-dir {} {}'.format(scriptloc, master_url, workdir, '> /dev/null 2>&1' if silent else '')
     for x in range(retries):
-        if subprocess.call(cmd, shell=True, **kwargs) == 0:
-            return True
-        if x == 0:
-            printw('Could not boot slave. retrying...')
-        time.sleep(retries_sleep)
-    printe('Could not boot slave (failed {} times, {} sleeptime between executions)'.format(retries, retries_sleep))
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).decode('utf-8').strip()
+            if len(output.split('\n')) == 1: # Worker script prints exactly 1 line when all is well: "Starting org.apache.spark.deploy.worker.Worker, logging to..."
+                return True
+            printe('Worker script output indicates failure to launch.')
+            if x == 0:
+                print('Output: {}'.format(output))
+        except Exception as e:
+            if x == 0:
+                printw('Could not boot worker. retrying...')
+            time.sleep(retries_sleep)
+    printe('Could not boot worker (failed {} times, {} sleeptime between executions)'.format(retries, retries_sleep))
     return False

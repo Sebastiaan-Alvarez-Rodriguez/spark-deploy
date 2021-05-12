@@ -1,15 +1,16 @@
+import os
 import re
 import subprocess
 import sys
 import time
 
-'''Code in this file boots up Spark instances.'''
 
+'''Code in this file stops all running Spark daemons.'''
 
 
 def _terminate_daemon(scriptloc, silent, retries, retries_sleep):
     if not isfile(scriptloc):
-        printe('Could not find file at {}. Did Spark not install successfully?'.format(scriptloc))
+        printw('Could not find file at {}. Did Spark not install successfully?'.format(scriptloc))
         return False
 
     cmd = 'bash {} 1>&2'.format(scriptloc)
@@ -28,8 +29,8 @@ def _terminate_daemon(scriptloc, silent, retries, retries_sleep):
 
 def _terminate_daemons(sparkloc, silent, retries, retries_sleep):
     if not isdir(sparkloc):
-        printe('Could not find Spark installation at {}. Did you run the `install` command for that location?'.format(sparkloc))
-        return False
+        printw('Could not find Spark installation at {}. We presume no daemons are running.'.format(sparkloc))
+        return True
     return all(_terminate_daemon(x, silent, retries, retries_sleep) for x in [join(sparkloc, 'sbin', 'stop-worker.sh'), join(sparkloc, 'sbin', 'stop-master.sh')])
 
 
@@ -44,6 +45,8 @@ def stop_all(sparkloc, workdir=None, silent=False, retries=5, retries_sleep=5):
 
     Returns:
         `True` on success, `False` otherwise.'''
+    sparkloc = os.path.expanduser(sparkloc)
+    workdir = os.path.expanduser(workdir)
     if not silent:
         print('Terminating daemons...')
     if not _terminate_daemons(sparkloc, silent, retries, retries_sleep):

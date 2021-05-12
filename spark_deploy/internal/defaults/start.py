@@ -1,6 +1,6 @@
 # start default values
 def workdir():
-    return './spark_workdir'
+    return '~/spark_workdir'
 
 def retries():
     return 5

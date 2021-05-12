@@ -17,7 +17,7 @@ def _cached(response, cached_val):
 def subparser(subparsers):
     '''Register subparser modules'''
     stopparser = subparsers.add_parser('stop',  help='Stop Spark cluster.')
-    stopparser.add_argument('--workdir', metavar='path', type=str, default=start_defaults.workdir(), help='If set, workdir location will be removed for all slave daemons (default={}). Note: The home directory of the remote machines is prepended to this path if it is relative.'.format(start_defaults.workdir()))
+    stopparser.add_argument('--workdir', metavar='path', type=str, default=start_defaults.workdir(), help='If set, workdir location will be removed for all worker daemons (default={}).'.format(start_defaults.workdir()))
     stopparser.add_argument('--silent', help='If set, less boot output is shown.', action='store_true')
     stopparser.add_argument('--retries', metavar='amount', type=int, default=defaults.retries(), help='Amount of retries to use for risky operations (default={}).'.format(defaults.retries()))
     return [stopparser]
