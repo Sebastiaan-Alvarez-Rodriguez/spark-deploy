@@ -90,9 +90,9 @@ def clean(reservation, key_path, paths, admin_id=None, silent=False):
 
 
 def submit(reservation, command, paths=[], install_dir=install_defaults.install_dir(), key_path=None, application_dir=defaults.application_dir(), master_id=None, silent=False):
-    '''Deploy data on the RADOS-Ceph cluster, on an existing reservation.
+    '''Submit applications using spark-submit on the remote Spark cluster, on an existing reservation.
     Args:
-        reservation (`metareserve.Reservation`): Reservation object with all nodes to start RADOS-Ceph on.
+        reservation (`metareserve.Reservation`): Reservation object with all nodes to we run Spark on.
         command (str): Command to propagate to remote "spark-submit" executable.
         paths (optional list(str)): Data paths to offload to the remote cluster. Can be relative to CWD or absolute.
         install_dir (str): Location on remote host where Spark (and any local-installed Java) is installed in.
@@ -145,3 +145,96 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
     else:
         printe('Could not submit application: {}'.format(err))
     return exitcode == 0
+
+
+class SubmitCommandBuilder(object):
+    '''Object to assist with generating spark-submit commands.'''
+    def __init__(self, cmd_type='java'):
+        if cmd_type != 'java' and cmd_type != 'python':
+            raise ValueError('Can only build command for types "java", "python". Found cmd_type="{}".'.format(cmd_type))
+        self.cmd_type = cmd_type
+        
+        # Shared options
+        self.master = None
+        self.deploymode = 'client' if cmd_type == 'python' else 'cluster'
+        self.java_options = []
+        self.applicationpath = None
+        self.conf_options = []
+        self.args = None
+
+        # Java-only options
+        self.classname = None
+        self.jars = []
+
+
+    def set_master(self, spark_url):
+        self.master = spark_url
+
+
+    def set_deploymode(self, mode):
+        ''' Set spark-submit deploymode. Accepted options are "cluster" and "client".
+        In cluster mode, application is transferred to a node in the cluster, to be executed there.
+        In client mode, application runs from the calling host.
+        Note: Python commands must use client mode.'''
+        if mode != 'client' and mode != 'cluster':
+            raise ValueError('Only know of "client" and "cluster" deploymodes. Found: "{}"'.format(mode))
+        if cmd_type == 'python' and mode == 'cluster':
+            raise ValueError('Cannot set deploymode to "cluster" for Python deployments.')
+        self.deploymode = mode
+
+
+    def add_java_options(self, *opts):
+        '''Add Spark driver Java options, e.g: `-Dlog4j.configuration=file:/path/to/log4j.conf`. Note that Java options can be set for python submits.'''
+        self.java_options += list(str(x) for x in opts)
+
+
+    def set_application(self, path):
+        '''File containing the executable code.
+        In Python, this is a Python file.
+        In Java, this is a JAR containing a mainclass (specify classpath to mainclass with "set_class(class)".'''
+        self.applicationpath = path
+
+
+    def add_conf_options(self, *opts):
+        '''Add Spark configuration options. E.g: `spark.driver.extraClassPath=/extra/path`'''
+        self.conf_options += list(str(x) for x in opts)
+
+
+    def set_args(self, args):
+        '''Set arguments for the passed application.'''
+        self.args = args
+
+
+    def set_class(self, classname):
+        '''Set Java class. Java-only. E.g: `org.sample.somedir.Benchmark`.'''
+        if cmd_type != 'java':
+            raise RuntimeError('Cannot set Java mainclass for non-Java cmd_type="{}".'.format(self.cmd_type))
+        self.classname = classname
+
+
+    def add_jars(self, *jars):
+        '''Add extra jars to submit alongside the main jar. Java-only.'''
+        self.jars += list(str(x) for x in jars)
+
+
+    def build(self):
+        '''Builds the command to append to calls to spark-submit. Note: This does not contain the call to spark-submit.
+        Returns:
+            `str` containing command to append to calls to spark-submit.'''
+        if not self.master:
+            raise RuntimeError('Cannot build submit command with unset master. Provide the spark url with "set_master(spark_url)".')
+        if not self.applicationpath:
+            raise RuntimeError('Cannot build submit command with unset application. Specify the application (.jar or .py) file using "set_application(path)".')
+        if self.cmd_type == 'java' and not self.classname:
+            raise RuntimeError('Cannot build java submit command with unset classname. Specify the classname using "set_class(classname)".')
+        j_opts = '--driver-java-options "{}"'.format(' '.join(self.java_options)) if self.java_options else ''
+        c_opts = ' '.join('--conf {}'.format(x) for in self.conf_options) if self.conf_options else ''
+
+        if not self.args:
+            args = ''
+        cmd_base = '{} {} --master {} --deploy-mode {}'.format(j_opts, c_opts, self.master, self.deploymode)
+        if self.cmd_type == 'java':
+            jars = '--jars "{}"'.format(','.join(self.jars)) if self.jars else ''
+            cmd_base += ' --class {} {}'.format(self.classname, jars)
+        cmd_base += ' {} {}'.format(self.applicationpath, args)
+        return cmd_base

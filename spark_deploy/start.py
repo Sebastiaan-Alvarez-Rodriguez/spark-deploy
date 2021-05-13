@@ -77,7 +77,7 @@ def start(reservation, install_dir=install_defaults.install_dir(), key_path=None
         retries (optional int): Number of tries we try to connect to the master.
 
     Returns:
-        `(True, master_node_id)` on success, `(False, None)` otherwise.'''
+        `(True, master_node_id, master_url)` on success, `(False, None, None)` otherwise.'''
     if not reservation or len(reservation) == 0:
         raise ValueError('Reservation does not contain any items'+(' (reservation=None)' if not reservation else ''))
 
@@ -96,7 +96,7 @@ def start(reservation, install_dir=install_defaults.install_dir(), key_path=None
             master_host = master_host(master_picked)
         elif not isinstance(master_host, str):
             printe('Given master_host was not a callable function, nor a str. Instead: {} (type: {})'.format(master_host, type(master_host)))
-            return False, None
+            return False, None, None
 
         futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes}
         connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
@@ -105,9 +105,10 @@ def start(reservation, install_dir=install_defaults.install_dir(), key_path=None
 
         future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, module, install_dir, master_host, port=master_port, webui_port=webui_port, silent=silent, retries=5)
 
-        if not future_spark_master.result():
+        state_ok, master_url = future_spark_master.result():
+        if not state_ok:
             printe('Could not start Spark master on node: {}'.format(master_picked))
-            return False, None
+            return False, None, None
 
         futures_spark_workers = {node: executor.submit(_start_spark_worker, conn_wrapper.connection, module, install_dir, worker_workdir, master_picked, master_port=master_port, silent=silent, retries=retries) for node, conn_wrapper in connectionwrappers.items() if node != master_picked}
         state_ok = True
@@ -117,7 +118,7 @@ def start(reservation, install_dir=install_defaults.install_dir(), key_path=None
                 state_ok = False
         if state_ok:
             prints('Starting Spark on all nodes succeeded.')
-            return True, master_picked.node_id
+            return True, master_picked.node_id, master_url
         else:
             printe('Starting Spark failed on some nodes.')
-            return False, None
+            return False, None, None
