@@ -11,7 +11,7 @@ def java_home():
     return os.getenv('JAVA_HOME')
 
 
-def start_master(sparkloc, host, port=7077, webui_port=8080, silent=False, retries=5, retries_sleep=5):
+def start_master(sparkloc, host, host_webui, port=7077, webui_port=8080, silent=False, retries=5, retries_sleep=5):
     '''Boots master on given node.
     Note: Spark works with Daemons, so expect to return quickly, probably even before the worker is actually ready.
 
@@ -21,6 +21,7 @@ def start_master(sparkloc, host, port=7077, webui_port=8080, silent=False, retri
                     Warning: If a globally accessible ip/hostname is set (e.g. 0.0.0.0), then Spark is reachable from the public internet.
                              In such cases, make sure that the Spark `port` is not accessible in your firewall, so others cannot post jobs.
                              For increased privacy, also ensure `webui_port` is not accessible, so others cannot review node logs, cluster status etc.
+        host_webui (str): IP/Hostname of Spark WebUI. We use this only for printing purposes.
         port (optional int): port to use for master.
         webui_port (optional int): port for Spark webUI to use.
         silent (optional bool): If set, we only print errors and critical info (e.g. spark master url). Otherwise, more verbose output.
@@ -54,7 +55,7 @@ def start_master(sparkloc, host, port=7077, webui_port=8080, silent=False, retri
     master_url = 'spark://{}:{}'.format(host, port)
     for x in range(retries):
         if subprocess.call(cmd, shell=True, **kwargs) == 0:
-            printc('MASTER ready on {} (webui address: http://{}:{})'.format(master_url, host, webui_port), Color.CAN)
+            printc('MASTER ready on {} (webui address: http://{}:{})'.format(master_url, host_webui, webui_port), Color.CAN)
             return True, master_url
         if x == 0:
             printw('Could not boot master. Retrying...')

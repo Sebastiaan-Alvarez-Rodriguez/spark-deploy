@@ -1,6 +1,9 @@
+import random
+import tempfile
+
 import logging
 import remoto
-import tempfile
+
 from spark_deploy.internal.remoto.ssh_wrapper import RemotoSSHWrapper as _RemotoSSHWrapper
 import spark_deploy.thirdparty.sshconf as sshconf
 from spark_deploy.internal.util.printer import *
@@ -39,7 +42,7 @@ def _connection(remote_hostname, silent, loggername, ssh_configpath=None):
         printe('Could not connect to remote host {}'.format(remote_hostname))
         return None
 
-def get_ssh_connection(remote_hostname, silent=True, loggername='SilentLogger', ssh_params=None):
+def get_ssh_connection(remote_hostname, silent=True, loggername='logger-'+str(random.randint(0, 2^64-1)), ssh_params=None):
     '''Returns a deploy-spark-wrapped execnet connection.
     Args:
         remote_hostname (str): Remote host (or ip) to connect to.

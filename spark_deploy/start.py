@@ -10,9 +10,9 @@ import spark_deploy.internal.util.importer as importer
 from spark_deploy.internal.util.printer import *
 
 
-def _start_spark_master(remote_connection, module, install_dir, host, port=7077, webui_port=2205, silent=False, retries=5):
+def _start_spark_master(remote_connection, module, install_dir, host, host_webui, port=7077, webui_port=2205, silent=False, retries=5):
     remote_module = remote_connection.import_module(module)
-    return remote_module.start_master(loc.sparkdir(install_dir), host, port, webui_port, silent, retries)
+    return remote_module.start_master(loc.sparkdir(install_dir), host, host_webui, port, webui_port, silent, retries)
 
 
 def _start_spark_worker(remote_connection, module, install_dir, workdir, master_picked, master_port=7077, silent=False, retries=5):
@@ -103,9 +103,9 @@ def start(reservation, install_dir=install_defaults.install_dir(), key_path=None
 
         module = _generate_module_start()
 
-        future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, module, install_dir, master_host, port=master_port, webui_port=webui_port, silent=silent, retries=5)
+        future_spark_master = executor.submit(_start_spark_master, connectionwrappers[master_picked].connection, module, install_dir, master_host, master_picked.ip_public, port=master_port, webui_port=webui_port, silent=silent, retries=5)
 
-        state_ok, master_url = future_spark_master.result():
+        state_ok, master_url = future_spark_master.result()
         if not state_ok:
             printe('Could not start Spark master on node: {}'.format(master_picked))
             return False, None, None

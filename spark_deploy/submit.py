@@ -92,12 +92,15 @@ def clean(reservation, key_path, paths, admin_id=None, silent=False):
 def submit(reservation, command, paths=[], install_dir=install_defaults.install_dir(), key_path=None, application_dir=defaults.application_dir(), master_id=None, silent=False):
     '''Submit applications using spark-submit on the remote Spark cluster, on an existing reservation.
     Args:
-        reservation (`metareserve.Reservation`): Reservation object with all nodes to we run Spark on.
+        reservation (`metareserve.Reservation`): Reservation object with all nodes to we run Spark on. 
+                                                 Important if we deploy in cluster mode, as every node could be chosen to boot the JAR on, meaning every node must have the JAR.
+                                                 In client mode, you can just provide only the master node.
         command (str): Command to propagate to remote "spark-submit" executable.
         paths (optional list(str)): Data paths to offload to the remote cluster. Can be relative to CWD or absolute.
         install_dir (str): Location on remote host where Spark (and any local-installed Java) is installed in.
         key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
         application_dir (optional str): Location on remote host where we export all given 'paths' to.
+                                        Illegal values: 1. ''. 2. '~/'. The reason is that we use rsync for fast file transfer, which messes up homedir permissions if set as destination target.
         master_id (optional int): Node id of the Spark master. If `None`, the node with lowest public ip value (string comparison) will be picked.
         silent (optional bool): If set, we only print errors and critical info. Otherwise, more verbose output.
 
@@ -106,6 +109,12 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
     if not reservation or len(reservation) == 0:
         raise ValueError('Reservation does not contain any items'+(' (reservation=None)' if not reservation else ''))
 
+    if application_dir == '~/' or application_dir == '~' or not application_dir:
+        raise ValueError('application_dir must not be equal to "{}". Check the docs.'.format(application_dir))
+    if application_dir.startswith('~/'):
+        application_dir = application_dir[2:]
+
+
     master_picked, workers_picked = _get_master_and_workers(reservation, master_id)
     print('Picked master node: {}'.format(master_picked))
 
@@ -113,32 +122,42 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
     if key_path:
         ssh_kwargs['IdentityFile'] = key_path
 
-    connection = _get_ssh_connection(master_picked.ip_public, silent=silent, ssh_params=ssh_kwargs)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count()-1) as executor:
+        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes}
+        connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
 
-    _, _, exitcode = remoto.process.check(connection.connection, 'ls {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit')), shell=True)
-    if exitcode != 0:
-        raise FileNotFoundError('Could not find spark-submit executable on remote. Expected at: {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit')))
+        _, _, exitcode = remoto.process.check(connectionwrappers[master_picked].connection, 'ls {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit')), shell=True)
+        if exitcode != 0:
+            raise FileNotFoundError('Could not find spark-submit executable on master. Expected at: {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit')))
 
-    remoto.process.check(connection.connection, 'mkdir -p {}'.format(application_dir), shell=True)
-    if any(paths):
-        paths = [fs.abspath(x) for x in paths]
-        if not silent:
-            print('Transferring application data...')
-        with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count()-1) as executor:
-            fun = lambda path: subprocess.call('rsync -e "ssh -F {}" -az {} {}:{}'.format(connection.ssh_config.name, path, master_picked.ip_public, fs.join(application_dir, fs.basename(path))), shell=True) == 0
-            rsync_futures = [executor.submit(fun, path) for path in paths]
+        mkdir_fun = lambda conn: remoto.process.check(conn, 'mkdir -p {}'.format(application_dir), shell=True)[2] == 0
+        futures_application_mkdir = [executor.submit(mkdir_fun, connectionwrappers[x].connection) for x in reservation.nodes]
+        if not all(x.result() for x in futures_application_mkdir):
+            printe('Could not make directory "{}" on all nodes.'.format(application_dir))
+            return False
 
-            if not all(x.result() for x in rsync_futures):
-                printe('Could not deploy data.')
+        if any(paths):
+            paths = [fs.abspath(x) for x in paths]
+            if not silent:
+                print('Transferring application data...')
+
+            dests = [fs.join(application_dir, fs.basename(path)) for path in paths]
+            rsync_global_net_fun = lambda node, conn_wrapper, path, dest: subprocess.call('rsync -e "ssh -F {}" -azL {} {}:{}'.format(conn_wrapper.ssh_config.name, path, node.ip_public, dest), shell=True) == 0
+            futures_rsync = [executor.submit(rsync_global_net_fun, node, conn_wrapper, path, dest) for (path, dest) in zip(paths, dests) for (node, conn_wrapper) in connectionwrappers.items()]
+
+            if not all(x.result() for x in futures_rsync):
+                printe('Could not deploy data to all remote nodes.')
                 return False
+
         if not silent:
             prints('Application data deployed.')
 
     if not install_dir[0] == '/' and not install_dir[0] == '~': # We deal with a relative path as installdir. This means '~/' must be appended, so we can execute this from non-home cwds.
         installdir = '~/'+install_dir
     run_cmd = '{} {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit'), command) # TODO: Default relative path "./deps" does not work here below, when changing the cwd away from $HOME!!!
-    print('Executing:\n{}'.format(run_cmd))
-    out, err, exitcode = remoto.process.check(connection.connection, run_cmd, shell=True, cwd=application_dir)
+    if not silent:
+        print('Executing:\n{}'.format(run_cmd))
+    out, err, exitcode = remoto.process.check(connectionwrappers[master_picked].connection, run_cmd, shell=True, cwd=application_dir)
 
     if exitcode == 0:
         prints('Application submission succeeded.')
@@ -178,7 +197,7 @@ class SubmitCommandBuilder(object):
         Note: Python commands must use client mode.'''
         if mode != 'client' and mode != 'cluster':
             raise ValueError('Only know of "client" and "cluster" deploymodes. Found: "{}"'.format(mode))
-        if cmd_type == 'python' and mode == 'cluster':
+        if self.cmd_type == 'python' and mode == 'cluster':
             raise ValueError('Cannot set deploymode to "cluster" for Python deployments.')
         self.deploymode = mode
 
@@ -207,7 +226,7 @@ class SubmitCommandBuilder(object):
 
     def set_class(self, classname):
         '''Set Java class. Java-only. E.g: `org.sample.somedir.Benchmark`.'''
-        if cmd_type != 'java':
+        if self.cmd_type != 'java':
             raise RuntimeError('Cannot set Java mainclass for non-Java cmd_type="{}".'.format(self.cmd_type))
         self.classname = classname
 
@@ -228,10 +247,9 @@ class SubmitCommandBuilder(object):
         if self.cmd_type == 'java' and not self.classname:
             raise RuntimeError('Cannot build java submit command with unset classname. Specify the classname using "set_class(classname)".')
         j_opts = '--driver-java-options "{}"'.format(' '.join(self.java_options)) if self.java_options else ''
-        c_opts = ' '.join('--conf {}'.format(x) for in self.conf_options) if self.conf_options else ''
+        c_opts = ' '.join('--conf {}'.format(x) for x in self.conf_options) if self.conf_options else ''
 
-        if not self.args:
-            args = ''
+        args = self.args if self.args else ''
         cmd_base = '{} {} --master {} --deploy-mode {}'.format(j_opts, c_opts, self.master, self.deploymode)
         if self.cmd_type == 'java':
             jars = '--jars "{}"'.format(','.join(self.jars)) if self.jars else ''
