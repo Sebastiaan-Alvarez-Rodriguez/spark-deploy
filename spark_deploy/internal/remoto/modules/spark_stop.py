@@ -10,7 +10,7 @@ import time
 
 def _terminate_daemon(scriptloc, silent, retries, retries_sleep):
     if not isfile(scriptloc):
-        printw('Could not find file at {}. Did Spark not install successfully?'.format(scriptloc))
+        printw('Could not find file at "{}". Did Spark not install successfully?'.format(scriptloc))
         return False
 
     cmd = 'bash {} 1>&2'.format(scriptloc)
@@ -36,6 +36,9 @@ def _terminate_daemons(sparkloc, silent, retries, retries_sleep):
         scripts.append(join(sparkloc, 'sbin', 'stop-worker.sh'))
     elif isfile(join(sparkloc, 'sbin', 'stop-slave.sh')): # We run Spark 3.0.2 or older.
         scripts.append(join(sparkloc, 'sbin', 'stop-slave.sh'))
+    else:
+        printw('Could not find script at "{}", nor at "{}". Did Spark not install successfully?'.format(join(sparkloc, 'sbin', 'stop-worker.sh'), join(sparkloc, 'sbin', 'stop-slave.sh')))
+        return False
     return all(_terminate_daemon(x, silent, retries, retries_sleep) for x in scripts)
 
 
