@@ -2,7 +2,7 @@ import os
 
 
 class Environment(object):
-    '''Class to load and store persistent variables in a way that does not dependend on OS environment vars, login shells, shell types, etc.'''
+    '''Class to load and store persistent variables in a way that does not depend on OS environment vars, login shells, shell types, etc.'''
     def __init__(self):
         self._entered = False
 

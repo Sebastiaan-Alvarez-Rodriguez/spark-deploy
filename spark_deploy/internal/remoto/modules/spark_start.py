@@ -87,10 +87,15 @@ def start_worker(sparkloc, workdir, master_node, master_port=7077, silent=False,
         printe('Could not find Spark installation at {}. Did you run the `install` command for that location?'.format(sparkloc))
         return False
 
-    scriptloc = join(sparkloc, 'sbin', 'start-worker.sh')
+    scriptloc = join(sparkloc, 'sbin', 'start-worker.sh') # Spark 3.1.1 and newer script location
     if not isfile(scriptloc):
-        printe('Could not find file at "{}". Did Spark not install successfully?'.format(scriptloc))
-        return False
+        scriptloc_old = join(sparkloc, 'sbin', 'start-slave.sh') # Spark 3.0.2 and older script location
+        if isfile(scriptloc_old): # We run Spark 3.0.2 or lower.
+            scriptloc = scriptloc_old
+        else:
+            printe('Could not find file at "{}", or "{}". Did Spark not install successfully?'.format(scriptloc, scriptloc_old))
+            return False
+
 
     if not java_home_available():
         printe('JAVA_HOME not found in the current environment.')

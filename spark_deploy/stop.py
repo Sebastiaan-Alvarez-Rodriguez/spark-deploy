@@ -7,8 +7,8 @@ import spark_deploy.internal.defaults.stop as defaults
 from spark_deploy.internal.remoto.modulegenerator import ModuleGenerator
 from spark_deploy.internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import spark_deploy.internal.util.fs as fs
-import spark_deploy.internal.util.location as loc
 import spark_deploy.internal.util.importer as importer
+import spark_deploy.internal.util.location as loc
 from spark_deploy.internal.util.printer import *
 
 

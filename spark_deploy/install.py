@@ -8,9 +8,9 @@ import spark_deploy.internal.util.location as loc
 import spark_deploy.internal.util.importer as importer
 from spark_deploy.internal.util.printer import *
 
-def _install_spark(connection, spark_module, install_dir, spark_url, silent=False, retries=5):
+def _install_spark(connection, spark_module, install_dir, spark_url, force_reinstall, silent=False, retries=5):
     remote_module = connection.import_module(spark_module)
-    return remote_module.spark_install(loc.sparkdir(install_dir), spark_url, silent, retries)
+    return remote_module.spark_install(loc.sparkdir(install_dir), spark_url, force_reinstall, silent, retries)
 
 
 def _install_java(connection, java_module, install_dir, java_url, java_min, java_max, use_sudo, silent=False, retries=5):
@@ -53,7 +53,7 @@ def _merge_kwargs(x, y):
     return z
 
 
-def install(reservation, install_dir=defaults.install_dir(), key_path=None, spark_url=defaults.spark_url(), java_url=defaults.java_url(), java_min=defaults.java_min(), java_max=defaults.java_max(), use_sudo=defaults.use_sudo(), silent=False, retries=defaults.retries()):
+def install(reservation, install_dir=defaults.install_dir(), key_path=None, spark_url=defaults.spark_url(), java_url=defaults.java_url(), java_min=defaults.java_min(), java_max=defaults.java_max(), use_sudo=defaults.use_sudo(), force_reinstall=False, silent=False, retries=defaults.retries()):
     '''Install Spark and Java on a reserved cluster. Does not reinstall if already present.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to install Spark on.
@@ -64,6 +64,7 @@ def install(reservation, install_dir=defaults.install_dir(), key_path=None, spar
         java_min (optional int): Minimal Java version to accept. 0 means no limit.
         java_max (optional int): Maximal Java version to accept. 0 means no limit.
         use_sudo (optional bool): If set, installs some libraries system-wide. Otherwise, performs local installation.
+        force_reinstall (optional bool): If set, we always will re-download and install libraries. Otherwise, we will skip installing libraries that we already have installed.
         silent (optional bool): If set, we only print errors and critical info.
         retries (optional int): Number of tries we try to download archives.
 
@@ -92,7 +93,7 @@ def install(reservation, install_dir=defaults.install_dir(), key_path=None, spar
         spark_module = _generate_module_spark()
         java_module = _generate_module_java()
 
-        futures_install_spark = {executor.submit(_install_spark, x.connection, spark_module, install_dir, spark_url, silent=silent, retries=retries): x for x in connectionwrappers}
+        futures_install_spark = {executor.submit(_install_spark, x.connection, spark_module, install_dir, spark_url, force_reinstall, silent=silent, retries=retries): x for x in connectionwrappers}
         futures_install_java = {executor.submit(_install_java, x.connection, java_module, install_dir, java_url, java_min, java_max, use_sudo, silent=silent, retries=retries): x for x in connectionwrappers}
 
         state_ok = True

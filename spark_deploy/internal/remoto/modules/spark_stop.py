@@ -31,7 +31,12 @@ def _terminate_daemons(sparkloc, silent, retries, retries_sleep):
     if not isdir(sparkloc):
         printw('Could not find Spark installation at {}. We presume no daemons are running.'.format(sparkloc))
         return True
-    return all(_terminate_daemon(x, silent, retries, retries_sleep) for x in [join(sparkloc, 'sbin', 'stop-worker.sh'), join(sparkloc, 'sbin', 'stop-master.sh')])
+    scripts = [join(sparkloc, 'sbin', 'stop-master.sh')]
+    if isfile(join(sparkloc, 'sbin', 'stop-worker.sh')): # We run Spark 3.1.1 or newer.
+        scripts.append(join(sparkloc, 'sbin', 'stop-worker.sh'))
+    elif isfile(join(sparkloc, 'sbin', 'stop-slave.sh')): # We run Spark 3.0.2 or older.
+        scripts.append(join(sparkloc, 'sbin', 'stop-slave.sh'))
+    return all(_terminate_daemon(x, silent, retries, retries_sleep) for x in scripts)
 
 
 def stop_all(sparkloc, workdir=None, silent=False, retries=5, retries_sleep=5):

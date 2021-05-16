@@ -7,10 +7,33 @@ import remoto.process
 
 import spark_deploy.internal.defaults.install as install_defaults
 import spark_deploy.internal.defaults.submit as defaults
+from spark_deploy.internal.remoto.modulegenerator import ModuleGenerator
 from spark_deploy.internal.remoto.util import get_ssh_connection as _get_ssh_connection
 import spark_deploy.internal.util.fs as fs
+import spark_deploy.internal.util.importer as importer
 import spark_deploy.internal.util.location as loc
 from spark_deploy.internal.util.printer import *
+
+
+def _submit_spark(remote_connection, module, command, cwd, silent=False):
+    remote_module = remote_connection.import_module(module)
+    if not silent:
+        print('Executing: {}'.format(command))
+    return remote_module.submit(command, cwd)
+
+
+def _generate_module_submit(silent=False):
+    '''Generates Spark-submit module from available sources.'''
+    generation_loc = fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'generated', 'submit_spark.py')
+    files = [
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'util', 'printer.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'printer.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'env.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'spark_submit.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'remoto_base.py'),
+    ]
+    ModuleGenerator().with_module(fs).with_files(*files).generate(generation_loc, silent)
+    return importer.import_full_path(generation_loc)
 
 
 
@@ -154,16 +177,11 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
 
     if not install_dir[0] == '/' and not install_dir[0] == '~': # We deal with a relative path as installdir. This means '~/' must be appended, so we can execute this from non-home cwds.
         installdir = '~/'+install_dir
-    run_cmd = '{} {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit'), command) # TODO: Default relative path "./deps" does not work here below, when changing the cwd away from $HOME!!!
-    if not silent:
-        print('Executing:\n{}'.format(run_cmd))
-    out, err, exitcode = remoto.process.check(connectionwrappers[master_picked].connection, run_cmd, shell=True, cwd=application_dir)
+    run_cmd = '{} {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit'), command)
 
-    if exitcode == 0:
-        prints('Application submission succeeded.')
-    else:
-        printe('Could not submit application: {}'.format(err))
-    return exitcode == 0
+    submit_module = _generate_module_submit()
+
+    return _submit_spark(connectionwrappers[master_picked].connection, submit_module, run_cmd, application_dir, silent=silent)
 
 
 class SubmitCommandBuilder(object):

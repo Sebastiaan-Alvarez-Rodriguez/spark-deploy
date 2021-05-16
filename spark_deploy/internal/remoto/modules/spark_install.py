@@ -11,8 +11,8 @@ def _is_installed(location):
     return isdir(location) and isdir(join(location, 'sbin'))
 
 
-def spark_install(location, url, silent=False, retries=5):
-    '''Installs Spark by downloading and installing from `.tgz`. Assumes extracted zip layout to look like:
+def spark_install(location, url, force_reinstall=False, silent=False, retries=5):
+    '''Installs Spark by downloading and installing from `.tgz`. Assumes extracted archive layout to look like:
     | some_dir/
     |           conf/
     |           examples/
@@ -21,18 +21,20 @@ def spark_install(location, url, silent=False, retries=5):
     The contents from `some_dir` are copied to given `location`.
     Args:
         location (str): The location where final output will be available on success.
-        url (str): URL of zip to download. Look e.g. in 'https://downloads.apache.org/spark/' for zips.
+        url (str): URL of zip to download. Look e.g. in 'https://archive.apache.org/dist/spark/' for suitable archives.
+        force_reinstall (optional bool): If set, reinstalls Spark if it is found. Otherwise, we skip installation if Spark is found.
         silent (optional bool): If set, prints less info.
         retries (optional int): Number of retries to use when downloading, extracting.
     Returns:
         `True` on success, `False` on failure.'''
     location = os.path.expanduser(location)
-    if _is_installed(location): # Already installed
+    if _is_installed(location) and not force_reinstall: # Already installed
         if not silent:
             print('Existing Spark installation detected. Skipping installation.')
         return True
 
-    mkdir(location, exist_ok=True)
+    rm(location, ignore_errors=True)
+    mkdir(location)
     if not silent:
         print('Installing Spark in {}...'.format(location))
 
