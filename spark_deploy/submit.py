@@ -112,7 +112,7 @@ def clean(reservation, key_path, paths, admin_id=None, silent=False):
 
 
 
-def submit(reservation, command, paths=[], install_dir=install_defaults.install_dir(), key_path=None, application_dir=defaults.application_dir(), master_id=None, silent=False):
+def submit(reservation, command, paths=[], install_dir=install_defaults.install_dir(), key_path=None, application_dir=defaults.application_dir(), master_id=None, use_sudo=False, silent=False):
     '''Submit applications using spark-submit on the remote Spark cluster, on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to we run Spark on. 
@@ -125,6 +125,7 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
         application_dir (optional str): Location on remote host where we export all given 'paths' to.
                                         Illegal values: 1. ''. 2. '~/'. The reason is that we use rsync for fast file transfer, which messes up homedir permissions if set as destination target.
         master_id (optional int): Node id of the Spark master. If `None`, the node with lowest public ip value (string comparison) will be picked.
+        use_sudo (optional bool): If set, uses sudo when deploying.
         silent (optional bool): If set, we only print errors and critical info. Otherwise, more verbose output.
 
     Returns:
@@ -178,7 +179,8 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
     if not install_dir[0] == '/' and not install_dir[0] == '~': # We deal with a relative path as installdir. This means '~/' must be appended, so we can execute this from non-home cwds.
         installdir = '~/'+install_dir
     run_cmd = '{} {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit'), command)
-
+    if use_sudo:
+        run_cmd = 'sudo '+run_cmd
     submit_module = _generate_module_submit()
 
     return _submit_spark(connectionwrappers[master_picked].connection, submit_module, run_cmd, application_dir, silent=silent)

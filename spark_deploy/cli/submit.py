@@ -10,9 +10,10 @@ def subparser(subparsers):
     submitparser = subparsers.add_parser('submit', help='Submit applications to a running remote Spark cluster.')
     submitparser.add_argument('cmd', metavar='cmd', type=str, default=None, help='Command to execute with "spark-submit". if you need to use flags in "spark-submit" with "-" signs, use e.g. "-- -h" to ignore "-" signs for the rest of the command.')
     submitparser.add_argument('--master', metavar='id', dest='master_id', type=int, default=None, help='ID of the node that will be the master node (command will be executed on this node).')
-    submitparser.add_argument('--silent', help='If set, less boot output is shown.', action='store_true')
     submitparser.add_argument('--paths', metavar='path', type=str, nargs='+', default=[], help='Paths to files/directories to export to the cluster. These files/directories will be in the CWD when executing "spark-submit".')
     submitparser.add_argument('--application_dir', type=str, default=defaults.application_dir(), help='Location on remote host where we export all given applications to (pointed to by "paths").')
+    submitparser.add_argument('--use-sudo', dest='use_sudo', help='If set, uses sudo when deploying.')
+    submitparser.add_argument('--silent', help='If set, less boot output is shown.', action='store_true')
     
     return [submitparser]
 
@@ -28,4 +29,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _submit(reservation, args.cmd, args.paths, args.install_dir, args.key_path, args.application_dir, args.master_id, silent=args.silent) if reservation else False
+    return _submit(reservation, args.cmd, args.paths, args.install_dir, args.key_path, args.application_dir, args.master_id, use_sudo=args.use_sudo, silent=args.silent) if reservation else False
