@@ -11,7 +11,7 @@ def java_home():
     return os.getenv('JAVA_HOME')
 
 
-def start_master(sparkloc, host, host_webui, port=7077, webui_port=8080, silent=False, retries=5, retries_sleep=5):
+def start_master(sparkloc, host, host_webui, port=7077, webui_port=8080, use_sudo=False, silent=False, retries=5, retries_sleep=5):
     '''Boots master on given node.
     Note: Spark works with Daemons, so expect to return quickly, probably even before the worker is actually ready.
 
@@ -24,6 +24,7 @@ def start_master(sparkloc, host, host_webui, port=7077, webui_port=8080, silent=
         host_webui (str): IP/Hostname of Spark WebUI. We use this only for printing purposes.
         port (optional int): port to use for master.
         webui_port (optional int): port for Spark webUI to use.
+        use_sudo (optional bool): If set, uses sudo when starting.
         silent (optional bool): If set, we only print errors and critical info (e.g. spark master url). Otherwise, more verbose output.
         retries (optional int): Number of tries we try to connect to the master.
         retries_sleep (optional int): Number of seconds we sleep between tries.
@@ -50,6 +51,8 @@ def start_master(sparkloc, host, host_webui, port=7077, webui_port=8080, silent=
         print('Spawning master, using hostname {}...'.format(host))
 
     cmd = '{} --host {} --port {} --webui-port {} 1>&2'.format(scriptloc, host, port, webui_port)
+    if use_sudo:
+        cmd = 'sudo '+cmd
     kwargs = {'stderr': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL} if silent else {}
 
     master_url = 'spark://{}:{}'.format(host, port)
@@ -64,7 +67,7 @@ def start_master(sparkloc, host, host_webui, port=7077, webui_port=8080, silent=
     return False, None
 
 
-def start_worker(sparkloc, workdir, master_node, master_port=7077, silent=False, retries=5, retries_sleep=5):
+def start_worker(sparkloc, workdir, master_node, master_port=7077, use_sudo=False, silent=False, retries=5, retries_sleep=5):
     '''Boots a worker.
     Note: Spark works with Daemons, so expect to return quickly, probably even before the worker is actually ready.
 
@@ -73,6 +76,7 @@ def start_worker(sparkloc, workdir, master_node, master_port=7077, silent=False,
         workdir (str): Location where Spark workdir must be created.
         master_node (str): ip/hostname of master.
         master_port (optional int): port of master.
+        use_sudo (optional bool): If set, uses sudo when starting.
         silent (optional bool): If set, we only print errors and critical info (e.g. spark master url). Otherwise, more verbose output.
         retries (optional int): Number of tries we try to connect to the master.
         retries_sleep (optional int): Number of seconds we sleep between tries.
@@ -107,6 +111,8 @@ def start_worker(sparkloc, workdir, master_node, master_port=7077, silent=False,
         print('Spawning worker')
 
     cmd = '{} {} --work-dir {} {}'.format(scriptloc, master_url, workdir, '> /dev/null 2>&1' if silent else '')
+    if use_sudo:
+        cmd = 'sudo '+cmd
     for x in range(retries):
         try:
             output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).decode('utf-8').strip()

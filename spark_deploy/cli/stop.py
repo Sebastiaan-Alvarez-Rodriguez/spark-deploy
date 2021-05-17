@@ -18,6 +18,7 @@ def subparser(subparsers):
     '''Register subparser modules'''
     stopparser = subparsers.add_parser('stop',  help='Stop Spark cluster.')
     stopparser.add_argument('--workdir', metavar='path', type=str, default=start_defaults.workdir(), help='If set, workdir location will be removed for all worker daemons (default={}).'.format(start_defaults.workdir()))
+    stopparser.add_argument('--use-sudo', dest='use_sudo', help='If set, uses sudo when stopping Spark.')
     stopparser.add_argument('--silent', help='If set, less boot output is shown.', action='store_true')
     stopparser.add_argument('--retries', metavar='amount', type=int, default=defaults.retries(), help='Amount of retries to use for risky operations (default={}).'.format(defaults.retries()))
     return [stopparser]
@@ -34,4 +35,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _stop(reservation, args.install_dir, args.key_path, args.workdir, silent=args.silent, retries=args.retries) if reservation else False
+    return _stop(reservation, args.install_dir, args.key_path, args.workdir, use_sudo=args.use_sudo, silent=args.silent, retries=args.retries) if reservation else False

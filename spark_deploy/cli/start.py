@@ -12,6 +12,7 @@ def subparser(subparsers):
     startparser.add_argument('--master-host', metavar='host', dest='master_host', type=str, default=None, help='Master hostname to listen on.')
     startparser.add_argument('--master-port', metavar='port', dest='master_port', type=int, default=defaults.masterport(), help='port to use for master (default={}).'.format(defaults.masterport()))
     startparser.add_argument('--webui-port', metavar='port', dest='webui_port', type=int, default=defaults.webuiport(), help='port to use for the Spark webUI (default={}).'.format(defaults.webuiport()))
+    startparser.add_argument('--use-sudo', dest='use_sudo', help='If set, uses sudo when starting Spark.')
     startparser.add_argument('--silent', help='If set, less boot output is shown.', action='store_true')
     startparser.add_argument('--retries', metavar='amount', type=int, default=defaults.retries(), help='Amount of retries to use for risky operations (default={}).'.format(defaults.retries()))
     return [startparser]
@@ -28,4 +29,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _start(reservation, args.install_dir, args.key_path, args.master_id, master_host=args.master_host, master_port=args.master_port, webui_port=args.webui_port, worker_workdir=args.workdir, silent=args.silent, retries=args.retries)[0] if reservation else False
+    return _start(reservation, args.install_dir, args.key_path, args.master_id, master_host=args.master_host, master_port=args.master_port, webui_port=args.webui_port, worker_workdir=args.workdir, use_sudo=args.use_sudo, silent=args.silent, retries=args.retries)[0] if reservation else False
