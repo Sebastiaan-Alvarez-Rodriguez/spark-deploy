@@ -29,7 +29,7 @@ def _terminate_daemon(scriptloc, use_sudo, silent, retries, retries_sleep):
     return False
 
 
-def _terminate_daemons(sparkloc, silent, retries, retries_sleep):
+def _terminate_daemons(sparkloc, use_sudo, silent, retries, retries_sleep):
     if not isdir(sparkloc):
         printw('Could not find Spark installation at {}. We presume no daemons are running.'.format(sparkloc))
         return True
@@ -41,7 +41,7 @@ def _terminate_daemons(sparkloc, silent, retries, retries_sleep):
     else:
         printw('Could not find script at "{}", nor at "{}". Did Spark not install successfully?'.format(join(sparkloc, 'sbin', 'stop-worker.sh'), join(sparkloc, 'sbin', 'stop-slave.sh')))
         return False
-    return all(_terminate_daemon(x, silent, retries, retries_sleep) for x in scripts)
+    return all(_terminate_daemon(x, use_sudo, silent, retries, retries_sleep) for x in scripts)
 
 
 def stop_all(sparkloc, workdir=None, use_sudo=False, silent=False, retries=5, retries_sleep=5):
