@@ -27,6 +27,7 @@ def _generate_module_start(silent=False):
         fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'util', 'printer.py'),
         fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'printer.py'),
         fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'env.py'),
+        fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'spark_stop.py'),
         fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'spark_start.py'),
         fs.join(fs.dirname(fs.abspath(__file__)), 'internal', 'remoto', 'modules', 'remoto_base.py'),
     ]

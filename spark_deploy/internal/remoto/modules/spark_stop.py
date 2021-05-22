@@ -57,7 +57,7 @@ def stop_all(sparkloc, workdir=None, use_sudo=False, silent=False, retries=5, re
     Returns:
         `True` on success, `False` otherwise.'''
     sparkloc = os.path.expanduser(sparkloc)
-    workdir = os.path.expanduser(workdir)
+    workdir = os.path.expanduser(workdir) if workdir else None
     if not silent:
         print('Terminating daemons...')
     if not _terminate_daemons(sparkloc, use_sudo, silent, retries, retries_sleep):

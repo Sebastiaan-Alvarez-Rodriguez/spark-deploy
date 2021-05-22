@@ -57,11 +57,17 @@ def start_master(sparkloc, host, host_webui, port=7077, webui_port=8080, use_sud
 
     master_url = 'spark://{}:{}'.format(host, port)
     for x in range(retries):
-        if subprocess.call(cmd, shell=True, **kwargs) == 0:
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).decode('utf-8').strip()
             printc('MASTER ready on {} (webui address: http://{}:{})'.format(master_url, host_webui, webui_port), Color.CAN)
             return True, master_url
-        if x == 0:
-            printw('Could not boot master. Retrying...')
+        except subprocess.CalledProcessError as e:
+            stdout = e.stdout.decode('utf-8').strip()
+            if 'running as process' in stdout:
+                stop_all(sparkloc, workdir=None, use_sudo=use_sudo, silent=True, retries=retries, retries_sleep=retries_sleep)
+                continue
+            if x == 0:
+                printw('Could not boot master (exitcode={}): {}'.format(e.exitcode, stdout))
         time.sleep(retries_sleep)
     printe('Could not boot master.')
     return False, None
@@ -100,7 +106,6 @@ def start_worker(sparkloc, workdir, master_node, master_port=7077, use_sudo=Fals
             printe('Could not find file at "{}", or "{}". Did Spark not install successfully?'.format(scriptloc, scriptloc_old))
             return False
 
-
     if not java_home_available():
         printe('JAVA_HOME not found in the current environment.')
         return False
@@ -122,8 +127,12 @@ def start_worker(sparkloc, workdir, master_node, master_port=7077, use_sudo=Fals
             if x == 0:
                 print('Output: {}'.format(output))
         except Exception as e:
+            stdout = e.stdout.decode('utf-8').strip()
+            if 'running as process' in stdout:
+                stop_all(sparkloc, workdir=workdir, use_sudo=use_sudo, silent=True, retries=retries, retries_sleep=retries_sleep)
+                continue
             if x == 0:
-                printw('Could not boot worker. retrying...')
-            time.sleep(retries_sleep)
+                printw('Could not boot worker (exitcode={}): {}'.format(e.exitcode, stdout))
+        time.sleep(retries_sleep)
     printe('Could not boot worker (failed {} times, {} sleeptime between executions)'.format(retries, retries_sleep))
     return False
