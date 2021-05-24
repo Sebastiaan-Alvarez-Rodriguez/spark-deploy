@@ -1,6 +1,7 @@
 import concurrent.futures
 from multiprocessing import cpu_count
 import os
+import re
 import subprocess
 
 import remoto.process
@@ -58,6 +59,12 @@ def _merge_kwargs(x, y):
     z = x.copy()
     z.update(y)
     return z
+
+
+def _validate_jvm_bytes(string):
+    '''Returns `True` if string adheres to JVM byte size notation, `False` otherwise. E.g: 4M, 1G. Accepted suffices include "k, m, g, t". Only integers are accepted.'''
+    regex = re.compile(r'[0-9]+[k|b|m|g]', re.IGNORECASE)
+    return regex.fullmatch(string) != None
 
 
 def clean(reservation, key_path, paths, admin_id=None, silent=False):
@@ -197,6 +204,8 @@ class SubmitCommandBuilder(object):
         self.master = None
         self.deploymode = 'client' if cmd_type == 'python' else 'cluster'
         self.java_options = []
+        self.driver_memory = '16G'
+        self.executor_memory = '16G'
         self.applicationpath = None
         self.conf_options = []
         self.args = None
@@ -232,6 +241,32 @@ class SubmitCommandBuilder(object):
         In Python, this is a Python file.
         In Java, this is a JAR containing a mainclass (specify classpath to mainclass with "set_class(class)".'''
         self.applicationpath = path
+
+
+    def set_memory(self, amount):
+        '''Sets Spark driver and executor memory.'
+        Args:
+            amount (str): JVM byte size indication to use, e.g. 4G (=4g), 400M, 16000k.'''
+        if not _validate_jvm_bytes(amount):
+            raise ValueError('Given value for amount ("{}") is invalid.'.format(amount))
+        self.driver_memory = amount
+        self.executor_memory = amount
+
+    def set_driver_memory(self, amount):
+        '''Sets Spark driver memory.'
+        Args:
+            amount (str): JVM byte size indication to use, e.g. 4G (=4g), 400M, 16000k.'''
+        if not _validate_jvm_bytes(amount):
+            raise ValueError('Given value for amount ("{}") is invalid.'.format(amount))
+        self.driver_memory = amount
+
+    def set_executor_memory(self, amount):
+        '''Sets Spark executor memory.'
+        Args:
+            amount (str): JVM byte size indication to use, e.g. 4G (=4g), 400M, 16000k.'''
+        if not _validate_jvm_bytes(amount):
+            raise ValueError('Given value for amount ("{}") is invalid.'.format(amount))
+        self.executor_memory = amount
 
 
     def add_conf_options(self, *opts):
@@ -270,7 +305,7 @@ class SubmitCommandBuilder(object):
         c_opts = ' '.join('--conf {}'.format(x) for x in self.conf_options) if self.conf_options else ''
 
         args = self.args if self.args else ''
-        cmd_base = '{} {} --master {} --deploy-mode {}'.format(j_opts, c_opts, self.master, self.deploymode)
+        cmd_base = '{} {} --master {} --deploy-mode {} --driver-memory {} --executor-memory {}'.format(j_opts, c_opts, self.master, self.deploymode, self.driver_memory, self.executor_memory)
         if self.cmd_type == 'java':
             jars = '--jars "{}"'.format(','.join(self.jars)) if self.jars else ''
             cmd_base += ' --class {} {}'.format(self.classname, jars)
