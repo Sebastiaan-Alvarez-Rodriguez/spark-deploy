@@ -9,7 +9,7 @@ import remoto.process
 import spark_deploy.internal.defaults.install as install_defaults
 import spark_deploy.internal.defaults.submit as defaults
 from spark_deploy.internal.remoto.modulegenerator import ModuleGenerator
-from spark_deploy.internal.remoto.util import get_ssh_connection as _get_ssh_connection
+from spark_deploy.internal.remoto.ssh_wrapper import get_wrapper, get_wrappers, close_wrappers
 import spark_deploy.internal.util.fs as fs
 import spark_deploy.internal.util.importer as importer
 import spark_deploy.internal.util.location as loc
@@ -67,13 +67,14 @@ def _validate_jvm_bytes(string):
     return regex.fullmatch(string) != None
 
 
-def clean(reservation, key_path, paths, admin_id=None, silent=False):
+def clean(reservation, key_path, paths, admin_id=None, connectionwrapper=None, silent=False):
     '''Cleans data from the RADOS-Ceph cluster, on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to start RADOS-Ceph on.
         key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
         paths (list(str)): Data paths to delete to the remote cluster. Mountpoint path is always prepended.
         admin_id (optional int): Node id of the ceph admin. If `None`, the node with lowest public ip value (string comparison) will be picked.
+        connectionwrapper (RemotoSSHWrapper): If set, uses provided connection to the admin instead of making a new one.
         mountpoint_path (optional str): Path where CephFS is mounted on all nodes.
         silent (optional bool): If set, we only print errors and critical info. Otherwise, more verbose output.
 
@@ -89,27 +90,32 @@ def clean(reservation, key_path, paths, admin_id=None, silent=False):
     if key_path:
         ssh_kwargs['IdentityFile'] = key_path
 
-    connection = _get_ssh_connection(admin_picked.ip_public, silent=silent, ssh_params=ssh_kwargs)
+    local_connections = connectionwrapper == None
+    if local_connections:
+        connectionwrapper = get_wrapper(admin_picked, admin_picked.ip_public, ssh_params=ssh_kwargs, silent=silent)
 
     if any(paths):
         with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count()-1) as executor:
             if not silent:
                 print('Exporting data...')
-            rm_futures = [executor.submit(remoto.process.check, connection.connection, 'sudo rm -rf {}'.format(fs.join(mountpoint_path, path)), shell=True) for path in paths]
+            rm_futures = [executor.submit(remoto.process.check, connectionwrapper.connection, 'sudo rm -rf {}'.format(fs.join(mountpoint_path, path)), shell=True) for path in paths]
 
             state_ok = all(x.result()[2] == 0 for x in rm_futures)
 
     if not any(paths):
-        _, _, exitcode = remoto.process.check(connection.connection, 'sudo rm -rf {}/*'.format(mountpoint_path), shell=True)
+        _, _, exitcode = remoto.process.check(connectionwrapper.connection, 'sudo rm -rf {}/*'.format(mountpoint_path), shell=True)
         state_ok = exitcode == 0
     else:
         paths = [x if x[0] != '/' else x[1:] for x in paths]
         with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count()-1) as executor:
             if not silent:
                 print('Deleting data...')
-            rm_futures = [executor.submit(remoto.process.check, connection.connection, 'sudo rm -rf {}'.format(fs.join(mountpoint_path, path)), shell=True) for path in paths]
+            rm_futures = [executor.submit(remoto.process.check, connectionwrapper.connection, 'sudo rm -rf {}'.format(fs.join(mountpoint_path, path)), shell=True) for path in paths]
 
             state_ok = all(x.result()[2] == 0 for x in rm_futures)
+
+    if local_connections:
+        close_wrappers(connectionwrapper)
 
     if state_ok:
         prints('Data deleted.')
@@ -119,7 +125,7 @@ def clean(reservation, key_path, paths, admin_id=None, silent=False):
 
 
 
-def submit(reservation, command, paths=[], install_dir=install_defaults.install_dir(), key_path=None, application_dir=defaults.application_dir(), master_id=None, use_sudo=False, silent=False):
+def submit(reservation, command, paths=[], install_dir=install_defaults.install_dir(), key_path=None, connectionwrappers=None, application_dir=defaults.application_dir(), master_id=None, use_sudo=False, silent=False):
     '''Submit applications using spark-submit on the remote Spark cluster, on an existing reservation.
     Args:
         reservation (`metareserve.Reservation`): Reservation object with all nodes to we run Spark on. 
@@ -129,6 +135,7 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
         paths (optional list(str)): Data paths to offload to the remote cluster. Can be relative to CWD or absolute.
         install_dir (str): Location on remote host where Spark (and any local-installed Java) is installed in.
         key_path (str): Path to SSH key, which we use to connect to nodes. If `None`, we do not authenticate using an IdentityFile.
+        connectionwrappers (optional dict(metareserve.Node, RemotoSSHWrapper)): If set, uses provided connections instead of making new ones.
         application_dir (optional str): Location on remote host where we export all given 'paths' to.
                                         Illegal values: 1. ''. 2. '~/'. The reason is that we use rsync for fast file transfer, which messes up homedir permissions if set as destination target.
         master_id (optional int): Node id of the Spark master. If `None`, the node with lowest public ip value (string comparison) will be picked.
@@ -149,22 +156,26 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
     master_picked, workers_picked = _get_master_and_workers(reservation, master_id)
     print('Picked master node: {}'.format(master_picked))
 
-    ssh_kwargs = {'IdentitiesOnly': 'yes', 'User': master_picked.extra_info['user'], 'StrictHostKeyChecking': 'no'}
-    if key_path:
-        ssh_kwargs['IdentityFile'] = key_path
+    local_connections = connectionwrappers == None
+    if local_connections:
+        ssh_kwargs = {'IdentitiesOnly': 'yes', 'User': master_picked.extra_info['user'], 'StrictHostKeyChecking': 'no'}
+        if key_path:
+            ssh_kwargs['IdentityFile'] = key_path
+        connectionwrappers = get_wrappers(reservation.nodes, lambda node: node.ip_public, ssh_params=lambda node: _merge_kwargs(ssh_kwargs, {'User': node.extra_info['user']}), silent=silent)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count()-1) as executor:
-        futures_connection = {x: executor.submit(_get_ssh_connection, x.ip_public, silent=silent, ssh_params=_merge_kwargs(ssh_kwargs, {'User': x.extra_info['user']})) for x in reservation.nodes}
-        connectionwrappers = {node: future.result() for node, future in futures_connection.items()}
-
         _, _, exitcode = remoto.process.check(connectionwrappers[master_picked].connection, 'ls {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit')), shell=True)
         if exitcode != 0:
+            if local_connections:
+                close_wrappers(connectionwrappers)
             raise FileNotFoundError('Could not find spark-submit executable on master. Expected at: {}'.format(fs.join(loc.sparkdir(install_dir), 'bin', 'spark-submit')))
 
         mkdir_fun = lambda conn: remoto.process.check(conn, 'mkdir -p {}'.format(application_dir), shell=True)[2] == 0
         futures_application_mkdir = [executor.submit(mkdir_fun, connectionwrappers[x].connection) for x in reservation.nodes]
         if not all(x.result() for x in futures_application_mkdir):
             printe('Could not make directory "{}" on all nodes.'.format(application_dir))
+            if local_connections:
+                close_wrappers(connectionwrappers)
             return False
 
         if any(paths):
@@ -172,12 +183,23 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
             if not silent:
                 print('Transferring application data...')
 
+            if any(True for path in paths if not (fs.exists(path) or fs.issymlink(path))):
+                printe('Application data transfer found non-existing source paths:')
+                for path in paths:
+                    if not (fs.exists(path) or fs.issymlink(path)):
+                        print('    {}'.format(path))
+                if local_connections:
+                    close_wrappers(connectionwrappers)
+                return False
+
             dests = [fs.join(application_dir, fs.basename(path)) for path in paths]
             rsync_global_net_fun = lambda node, conn_wrapper, path, dest: subprocess.call('rsync -e "ssh -F {}" -azL {} {}:{}'.format(conn_wrapper.ssh_config.name, path, node.ip_public, dest), shell=True) == 0
             futures_rsync = [executor.submit(rsync_global_net_fun, node, conn_wrapper, path, dest) for (path, dest) in zip(paths, dests) for (node, conn_wrapper) in connectionwrappers.items()]
 
             if not all(x.result() for x in futures_rsync):
                 printe('Could not deploy data to all remote nodes.')
+                if local_connections:
+                    close_wrappers(connectionwrappers)
                 return False
 
         if not silent:
@@ -189,8 +211,10 @@ def submit(reservation, command, paths=[], install_dir=install_defaults.install_
     if use_sudo:
         run_cmd = 'sudo '+run_cmd
     submit_module = _generate_module_submit()
-
-    return _submit_spark(connectionwrappers[master_picked].connection, submit_module, run_cmd, application_dir, silent=silent)
+    retval = _submit_spark(connectionwrappers[master_picked].connection, submit_module, run_cmd, application_dir, silent=silent)
+    if local_connections:
+        close_wrappers(connectionwrappers)
+    return retval
 
 
 class SubmitCommandBuilder(object):
