@@ -2,12 +2,13 @@ import concurrent.futures
 import tempfile
 import uuid
 
-from rados_deploy.thirdparty.sshconf import *
+from spark_deploy.thirdparty.sshconf import *
 
 import logging
 import remoto
 
-from rados_deploy.internal.util.printer import *
+from spark_deploy.internal.util.printer import *
+
 
 
 class RemotoSSHWrapper(object):
@@ -35,7 +36,7 @@ class RemotoSSHWrapper(object):
     @property
     def open(self):
         '''If set, connection is open. Otherwise, Connection is closed'''
-        return self._open
+        return self._open and self._connection != None
     
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -44,10 +45,12 @@ class RemotoSSHWrapper(object):
 
 
     def exit(self):
-        self._connection.exit()
+        if self._connection:
+            self._connection.exit()
         if self._ssh_config:
             self._ssh_config.close()
         self._open = False
+
 
 
 def _build_ssh_config(hostname, ssh_params):
