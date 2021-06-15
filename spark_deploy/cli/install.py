@@ -29,4 +29,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _install(reservation, args.install_dir, args.key_path, args.spark_url, args.java_url, args.java_min, args.java_max, use_sudo=args.use_sudo, force_reinstall=args.force_reinstall, silent=args.silent, retries=args.retries) if reservation else False
+    return _install(reservation, install_dir=args.install_dir, key_path=args.key_path, spark_url=args.spark_url, java_url=args.java_url, java_min=args.java_min, java_max=args.java_max, use_sudo=args.use_sudo, force_reinstall=args.force_reinstall, silent=args.silent, retries=args.retries) if reservation else False

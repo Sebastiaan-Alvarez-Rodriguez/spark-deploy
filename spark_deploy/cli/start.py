@@ -29,4 +29,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _start(reservation, args.install_dir, args.key_path, args.master_id, master_host=args.master_host, master_port=args.master_port, webui_port=args.webui_port, worker_workdir=args.workdir, use_sudo=args.use_sudo, silent=args.silent, retries=args.retries)[0] if reservation else False
+    return _start(reservation, install_dir=args.install_dir, key_path=args.key_path, master_id=args.master_id, master_host=args.master_host, master_port=args.master_port, webui_port=args.webui_port, worker_workdir=args.workdir, use_sudo=args.use_sudo, silent=args.silent, retries=args.retries)[0] if reservation else False

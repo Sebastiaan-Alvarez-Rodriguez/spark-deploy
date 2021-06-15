@@ -21,4 +21,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _uninstall(reservation, args.install_dir, args.key_path) if reservation else False
+    return _uninstall(reservation, install_dir=args.install_dir, key_path=args.key_path) if reservation else False

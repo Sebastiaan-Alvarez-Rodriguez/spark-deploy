@@ -14,7 +14,6 @@ def subparser(subparsers):
     submitparser.add_argument('--application_dir', type=str, default=defaults.application_dir(), help='Location on remote host where we export all given applications to (pointed to by "paths").')
     submitparser.add_argument('--use-sudo', dest='use_sudo', help='If set, uses sudo when deploying.')
     submitparser.add_argument('--silent', help='If set, less boot output is shown.', action='store_true')
-    
     return [submitparser]
 
 
@@ -29,4 +28,4 @@ def deploy_args_set(args):
 
 def deploy(parsers, args):
     reservation = _cli_util.read_reservation_cli()
-    return _submit(reservation, args.cmd, args.paths, args.install_dir, args.key_path, args.application_dir, args.master_id, use_sudo=args.use_sudo, silent=args.silent) if reservation else False
+    return _submit(reservation, args.cmd, paths=args.paths, install_dir=args.install_dir, key_path=args.key_path, application_dir=args.application_dir, master_id=args.master_id, use_sudo=args.use_sudo, silent=args.silent) if reservation else False
