@@ -4,7 +4,7 @@ def install_dir():
     return '~/deps'
 
 def spark_url():
-    return 'https://archive.apache.org/dist/spark/spark-3.1.1/spark-3.1.1-bin-hadoop2.7.tgz'
+    return 'https://archive.apache.org/dist/spark/spark-3.1.2/spark-3.1.2-bin-hadoop2.7.tgz'
 
 def java_url():
     return 'https://download.java.net/java/GA/jdk11/9/GPL/openjdk-11.0.2_linux-x64_bin.tar.gz'
